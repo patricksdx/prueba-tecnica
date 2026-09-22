@@ -114,7 +114,10 @@ function asDate(value: unknown): string {
 
 async function parseSalesWorkbook(): Promise<ImportedSale[]> {
 	// The source workbook stays on the server; never expose it through Vite's public assets.
-	const workbookPath = resolve(process.cwd(), "src/assets/detalle_pedidos_2026.xlsx");
+	const workbookPath = resolve(
+		process.cwd(),
+		"src/assets/detalle_pedidos_2026.xlsx",
+	);
 	const workbook = XLSX.read(await readFile(workbookPath), {
 		type: "buffer",
 		cellDates: true,
@@ -304,9 +307,9 @@ export const getSalesDashboard = createServerFn({ method: "GET" }).handler(
 						orders: sellerOrders.size,
 					}))
 					.sort((a, b) => b.sales - a.sales),
-				orders: [...orders.values()]
-					.sort((a, b) => b.date.localeCompare(a.date))
-					.slice(0, 100),
+				orders: [...orders.values()].sort((a, b) =>
+					b.date.localeCompare(a.date),
+				),
 				managedUsers:
 					user.role === "admin"
 						? await db

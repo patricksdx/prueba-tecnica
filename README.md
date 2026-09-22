@@ -223,6 +223,8 @@ Define estas variables en el `.env` local (no se sube a Git):
 - `DATABASE_URL`: cadena de conexión PostgreSQL.
 - `CLERK_ADMIN_IDS`: IDs de Clerk separados por coma para promover al primer administrador.
 
-Configura `CLERK_ADMIN_IDS` con el ID Clerk del primer administrador: todos los registros nuevos comienzan sin rol y quedan en `/espera`; desde administración se les puede asignar `Lectura`, `Administrador` o devolverlos a espera. Activa Google como proveedor social desde la configuración de Clerk para que se ofrezca en el modal de acceso. Las tablas de usuarios y ventas se crean automáticamente; la base necesita permitir crear tablas e índices. El Excel de pedidos 2026 se importa a PostgreSQL al primer acceso. Ejecuta `bun run dev` para iniciar.
+Configura `CLERK_ADMIN_IDS` con el ID Clerk del primer administrador: todos los registros nuevos comienzan sin rol y quedan en `/espera`; desde administración se les puede asignar `Lectura`, `Administrador` o devolverlos a espera. Activa Google como proveedor social desde la configuración de Clerk para que se ofrezca en el modal de acceso. Las tablas de usuarios y ventas se crean automáticamente; la base necesita permitir crear tablas e índices. El Excel `src/assets/detalle_pedidos_2026.xlsx` se importa a PostgreSQL al primer acceso. Para desplegar una base vacía, incluye ese archivo en el servidor durante la importación inicial; no se publica como recurso web. Ejecuta `bun run dev` para iniciar.
 
-Las métricas y transacciones del dashboard siguen siendo datos demostrativos; el registro de usuario sí se guarda en PostgreSQL.
+Las tablas utilizan shadcn/ui y TanStack Table v9: búsqueda, ordenación, paginación y filtro de fecha para pedidos. El número de pedido abre un Sheet con su detalle y tiene menú contextual al hacer clic derecho.
+
+Las ventas, los pedidos y los perfiles de usuario se consultan desde PostgreSQL.
