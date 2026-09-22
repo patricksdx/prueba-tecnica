@@ -229,6 +229,7 @@ export const getSalesDashboard = createServerFn({ method: "GET" }).handler(
 			const months = Array.from({ length: 12 }, (_, index) => ({
 				month: monthNames[index],
 				sales: 0,
+				units: 0,
 			}));
 			const products = new Map<
 				string,
@@ -274,8 +275,10 @@ export const getSalesDashboard = createServerFn({ method: "GET" }).handler(
 			}
 			for (const row of completed) {
 				const monthIndex = Number(row.orderDate.slice(5, 7)) - 1;
-				if (monthIndex >= 0 && monthIndex < 12)
+				if (monthIndex >= 0 && monthIndex < 12) {
 					months[monthIndex].sales += row.total;
+					months[monthIndex].units += row.quantity;
+				}
 				const product = products.get(row.sku) ?? {
 					sku: row.sku,
 					product: row.product,
@@ -297,6 +300,11 @@ export const getSalesDashboard = createServerFn({ method: "GET" }).handler(
 			return {
 				user,
 				totalSales: completed.reduce((sum, row) => sum + row.total, 0),
+				completedOrders: [...orders.values()].filter((order) => order.status === "Completada").length,
+				unitsSold: completed.reduce((sum, row) => sum + row.quantity, 0),
+				pendingUsers: user.role === "admin"
+					? (await db.select({ value: count() }).from(users).where(sql`${users.role} IS NULL`))[0].value
+					: 0,
 				monthlySales: months,
 				products: [...products.values()]
 					.sort((a, b) => b.quantity - a.quantity)
