@@ -228,3 +228,12 @@ Configura `CLERK_ADMIN_IDS` con el ID Clerk del primer administrador: todos los 
 Las tablas utilizan shadcn/ui y TanStack Table v9: búsqueda, ordenación, paginación y filtro de fecha para pedidos. El número de pedido abre un Sheet con su detalle y tiene menú contextual al hacer clic derecho.
 
 Las ventas, los pedidos y los perfiles de usuario se consultan desde PostgreSQL.
+
+## Despliegue con Docker Compose
+
+1. Copia `.env.example` a `.env` y configura `VITE_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `DATABASE_URL` y `CLERK_ADMIN_IDS`. `APP_PORT` permite cambiar el puerto publicado (por defecto, `3000`).
+2. Ejecuta `docker compose up --build -d` y abre `http://localhost:3000` (o el puerto indicado en `APP_PORT`).
+
+`DATABASE_URL` debe apuntar a una instancia PostgreSQL accesible desde el contenedor. Si PostgreSQL corre en la máquina anfitriona, usa `host.docker.internal` como host de la conexión en lugar de `localhost`; en otro servidor, usa su dirección accesible desde Docker. La base de datos debe permitir crear tablas e índices. El Excel necesario para importar ventas al iniciar con una base vacía va incluido en la imagen.
+
+La clave pública `VITE_CLERK_PUBLISHABLE_KEY` se incorpora al cliente durante el build: si cambia, ejecuta de nuevo `docker compose up --build -d`. Las otras variables se pasan al contenedor al arrancar.
