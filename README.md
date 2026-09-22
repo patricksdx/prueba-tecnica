@@ -210,3 +210,18 @@ Files prefixed with `demo` can be safely deleted. They are there to provide a st
 You can learn more about all of the offerings from TanStack in the [TanStack documentation](https://tanstack.com).
 
 For TanStack Start specific documentation, visit [TanStack Start](https://tanstack.com/start).
+# Dashboard Acme
+
+La ruta `/` contiene solamente el inicio de sesión de Clerk. El dashboard vive en `/dashboard` y exige una sesión válida. Al entrar, el servidor consulta al usuario en Clerk y sincroniza su ID, correo y nombre en PostgreSQL usando Drizzle.
+
+## Configuración
+
+Define estas variables en el `.env` local (no se sube a Git):
+
+- `VITE_CLERK_PUBLISHABLE_KEY`: clave pública de la aplicación Clerk.
+- `CLERK_SECRET_KEY`: clave secreta de Clerk, solo para el servidor.
+- `DATABASE_URL`: cadena de conexión PostgreSQL.
+
+Activa Google como proveedor social desde la configuración de Clerk para que se ofrezca en el modal de acceso. La tabla `users` se crea automáticamente en el primer acceso autenticado; la base necesita permitir crear tablas e índices. Ejecuta `bun run dev` para iniciar.
+
+Las métricas y transacciones del dashboard siguen siendo datos demostrativos; el registro de usuario sí se guarda en PostgreSQL.
