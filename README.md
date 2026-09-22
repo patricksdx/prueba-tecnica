@@ -221,7 +221,8 @@ Define estas variables en el `.env` local (no se sube a Git):
 - `VITE_CLERK_PUBLISHABLE_KEY`: clave pública de la aplicación Clerk.
 - `CLERK_SECRET_KEY`: clave secreta de Clerk, solo para el servidor.
 - `DATABASE_URL`: cadena de conexión PostgreSQL.
+- `CLERK_ADMIN_IDS`: IDs de Clerk separados por coma para promover al primer administrador.
 
-Activa Google como proveedor social desde la configuración de Clerk para que se ofrezca en el modal de acceso. La tabla `users` se crea automáticamente en el primer acceso autenticado; la base necesita permitir crear tablas e índices. Ejecuta `bun run dev` para iniciar.
+Configura `CLERK_ADMIN_IDS` con el ID Clerk del primer administrador: todos los registros nuevos comienzan sin rol y quedan en `/espera`; desde administración se les puede asignar `Lectura`, `Administrador` o devolverlos a espera. Activa Google como proveedor social desde la configuración de Clerk para que se ofrezca en el modal de acceso. Las tablas de usuarios y ventas se crean automáticamente; la base necesita permitir crear tablas e índices. El Excel de pedidos 2026 se importa a PostgreSQL al primer acceso. Ejecuta `bun run dev` para iniciar.
 
 Las métricas y transacciones del dashboard siguen siendo datos demostrativos; el registro de usuario sí se guarda en PostgreSQL.

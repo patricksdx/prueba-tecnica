@@ -1,18 +1,13 @@
-import { SignInButton, Show } from "@clerk/tanstack-react-start";
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import { createServerFn } from "@tanstack/react-start";
 import { ArrowRight, Command, ShieldCheck } from "lucide-react";
-import { auth } from "@clerk/tanstack-react-start/server";
-
-const redirectIfSignedIn = createServerFn({ method: "GET" }).handler(
-	async () => {
-		const { isAuthenticated } = await auth();
-		if (isAuthenticated) throw redirect({ to: "/dashboard" });
-	},
-);
+import { SignInButton, Show } from "@clerk/tanstack-react-start";
+import { getSessionUser } from "../server/users";
 
 export const Route = createFileRoute("/")({
-	beforeLoad: () => redirectIfSignedIn(),
+	beforeLoad: async () => {
+		const user = await getSessionUser();
+		if (user) throw redirect({ to: user.role ? "/dashboard" : "/espera" });
+	},
 	component: LoginPage,
 });
 

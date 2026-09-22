@@ -1,408 +1,66 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
-import { createServerFn } from "@tanstack/react-start";
-import {
-	Activity,
-	ArrowDownRight,
-	ArrowRight,
-	ArrowUpRight,
-	BarChart3,
-	Bell,
-	ChevronDown,
-	CircleHelp,
-	Command,
-	CreditCard,
-	Download,
-	LayoutDashboard,
-	LifeBuoy,
-	Plus,
-	Search,
-	Settings2,
-	ShoppingBag,
-	Users,
-} from "lucide-react";
-import { Show, UserButton } from "@clerk/tanstack-react-start";
-import { auth, clerkClient } from "@clerk/tanstack-react-start/server";
-import { saveClerkUser } from "../server/users";
+import { UserButton } from "@clerk/tanstack-react-start"
+import { createFileRoute, useRouter } from "@tanstack/react-router"
+import { useState } from "react"
+import { Command, Package, ShoppingCart } from "lucide-react"
+import { DataTable } from "../components/data-table"
+import { currency, shortDate, orderColumns, sellerColumns, userColumns, type Order } from "../components/sales-columns"
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "../components/ui/sheet"
+import { changeUserRole, getOrderDetails, getSalesDashboard, type AppRole } from "../server/users"
 
-const requireUser = createServerFn({ method: "GET" }).handler(async () => {
-	const { isAuthenticated, userId } = await auth();
-	if (!isAuthenticated || !userId) {
-		throw redirect({ to: "/" });
-	}
-
-	const clerkUser = await (await clerkClient()).users.getUser(userId);
-	const user = await saveClerkUser({
-		clerkId: clerkUser.id,
-		email: clerkUser.primaryEmailAddress?.emailAddress ?? "",
-		name: [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(" "),
-	});
-
-	return user;
-});
-
-export const Route = createFileRoute("/dashboard")({
-	beforeLoad: () => requireUser(),
-	component: Dashboard,
-});
-
-const stats = [
-	{
-		label: "Ingresos totales",
-		value: "$45,231.89",
-		change: "+20.1%",
-		positive: true,
-		icon: CreditCard,
-		note: "respecto al mes pasado",
-	},
-	{
-		label: "Suscripciones",
-		value: "+2,350",
-		change: "+180.1%",
-		positive: true,
-		icon: Users,
-		note: "respecto al mes pasado",
-	},
-	{
-		label: "Ventas",
-		value: "+12,234",
-		change: "+19%",
-		positive: true,
-		icon: ShoppingBag,
-		note: "respecto al mes pasado",
-	},
-	{
-		label: "Activos ahora",
-		value: "+573",
-		change: "-4.5%",
-		positive: false,
-		icon: Activity,
-		note: "respecto a la última hora",
-	},
-];
-
-const transactions = [
-	{
-		initials: "OM",
-		name: "Olivia Martin",
-		email: "olivia.martin@email.com",
-		amount: "+$1,999.00",
-		tone: "violet",
-	},
-	{
-		initials: "JL",
-		name: "Jackson Lee",
-		email: "jackson.lee@email.com",
-		amount: "+$39.00",
-		tone: "blue",
-	},
-	{
-		initials: "IN",
-		name: "Isabella Nguyen",
-		email: "isabella.nguyen@email.com",
-		amount: "+$299.00",
-		tone: "pink",
-	},
-	{
-		initials: "WK",
-		name: "William Kim",
-		email: "william.kim@email.com",
-		amount: "+$99.00",
-		tone: "amber",
-	},
-	{
-		initials: "SD",
-		name: "Sofia Davis",
-		email: "sofia.davis@email.com",
-		amount: "+$39.00",
-		tone: "green",
-	},
-];
+export const Route = createFileRoute("/dashboard")({ loader: () => getSalesDashboard(), component: Dashboard })
+type OrderDetails = Awaited<ReturnType<typeof getOrderDetails>>
 
 function Dashboard() {
-	const user = Route.useRouteContext();
-	return (
-		<div className="dashboard-shell">
-			<aside className="sidebar">
-				<a className="brand" href="#inicio">
-					<span className="brand-mark">
-						<Command size={17} />
-					</span>
-					<span>Acme Inc.</span>
-					<ChevronDown size={15} className="muted-icon" />
-				</a>
-				<div className="workspace-label">Workspace</div>
-				<nav className="side-nav" aria-label="Navegación principal">
-					<a className="side-link active" href="#overview">
-						<LayoutDashboard size={17} /> Overview
-					</a>
-					<a className="side-link" href="#analytics">
-						<BarChart3 size={17} /> Analytics
-					</a>
-					<a className="side-link" href="#customers">
-						<Users size={17} /> Customers
-					</a>
-					<a className="side-link" href="#orders">
-						<ShoppingBag size={17} /> Orders{" "}
-						<span className="nav-count">12</span>
-					</a>
-				</nav>
-				<div className="workspace-label section-label">Settings</div>
-				<nav className="side-nav">
-					<a className="side-link" href="#settings">
-						<Settings2 size={17} /> General
-					</a>
-					<a className="side-link" href="#billing">
-						<CreditCard size={17} /> Billing
-					</a>
-				</nav>
-				<div className="sidebar-bottom">
-					<a className="side-link" href="#help">
-						<CircleHelp size={17} /> Help center
-					</a>
-					<a className="side-link" href="#support">
-						<LifeBuoy size={17} /> Support
-					</a>
-				</div>
-				<div className="profile-card">
-					<div className="profile-avatar">
-						{user.name.slice(0, 2).toUpperCase()}
-					</div>
-					<div className="profile-copy">
-						<strong>{user.name || "Usuario"}</strong>
-						<span>{user.email}</span>
-					</div>
-					<ChevronDown size={15} className="muted-icon" />
-				</div>
-			</aside>
+  const data = Route.useLoaderData()
+  const router = useRouter()
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
+  const [details, setDetails] = useState<OrderDetails>([])
+  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState<string | null>(null)
+  const [error, setError] = useState("")
+  const maxSales = Math.max(...data.monthlySales.map((month) => month.sales), 1)
 
-			<main className="dashboard-main">
-				<header className="topbar">
-					<div className="breadcrumbs">
-						<span>Workspace</span>
-						<span className="crumb-separator">/</span>
-						<strong>Overview</strong>
-					</div>
-					<div className="top-actions">
-						<button
-							type="button"
-							className="icon-button search-button"
-							aria-label="Buscar"
-						>
-							<Search size={17} />
-							<span>Search</span>
-							<kbd>⌘ K</kbd>
-						</button>
-						<button
-							type="button"
-							className="icon-button notification-button"
-							aria-label="Notificaciones"
-						>
-							<Bell size={17} />
-							<i />
-						</button>
-						<div className="auth-slot">
-							<Show when="signed-in">
-								<UserButton />
-							</Show>
-						</div>
-					</div>
-				</header>
+  async function openOrder(order: Order) {
+    setSelectedOrder(order)
+    setDetails([])
+    setLoading(true)
+    setError("")
+    try { setDetails(await getOrderDetails({ data: order.orderNo })) }
+    catch { setError("No se pudo cargar el detalle del pedido.") }
+    finally { setLoading(false) }
+  }
 
-				<div className="content-wrap">
-					<div className="page-heading">
-						<div>
-							<p className="eyebrow">Tuesday, October 24, 2024</p>
-							<h1>Overview</h1>
-							<p className="page-subtitle">
-								Aquí tienes un resumen de lo que está pasando.
-							</p>
-						</div>
-						<button type="button" className="primary-button">
-							<Plus size={16} /> Crear reporte
-						</button>
-					</div>
+  async function updateRole(clerkId: string, role: AppRole | null) {
+    setSaving(clerkId)
+    setError("")
+    try {
+      await changeUserRole({ data: { clerkId, role } })
+      await router.invalidate()
+    } catch { setError("No se pudo actualizar el rol. Verifica tus permisos.") }
+    finally { setSaving(null) }
+  }
 
-					<section className="stats-grid" aria-label="Métricas principales">
-						{stats.map(
-							({ label, value, change, positive, icon: Icon, note }) => (
-								<article className="stat-card" key={label}>
-									<div className="stat-top">
-										<span>{label}</span>
-										<Icon size={17} />
-									</div>
-									<div className="stat-value">{value}</div>
-									<div className="stat-foot">
-										<span className={positive ? "trend up" : "trend down"}>
-											{positive ? (
-												<ArrowUpRight size={14} />
-											) : (
-												<ArrowDownRight size={14} />
-											)}
-											{change}
-										</span>
-										<span>{note}</span>
-									</div>
-								</article>
-							),
-						)}
-					</section>
+  return <div className="sales-app">
+    <header className="sales-topbar">
+      <a className="sales-brand" href="/dashboard"><span className="brand-mark"><Command size={17} /></span> Panel de ventas</a>
+      <div className="sales-topbar-right"><span className="role-tag">{data.user.role === "admin" ? "Administrador" : "Solo lectura"}</span><UserButton /></div>
+    </header>
+    <main className="sales-content">
+      <div className="sales-heading"><div><p className="sales-eyebrow">REPORTE COMERCIAL · 2026</p><h1 className="text-3xl font-semibold tracking-tight">Ventas</h1><p className="text-sm text-muted-foreground">Pedidos, productos y desempeño de vendedores.</p></div><span className="source-badge"><Package size={15} /> Datos de pedidos</span></div>
+      {error && <div className="inline-error" role="alert">{error}</div>}
 
-					<section className="analytics-grid">
-						<article className="panel revenue-panel">
-							<div className="panel-heading">
-								<div>
-									<h2>Ingresos</h2>
-									<p>Ingresos de los últimos 6 meses</p>
-								</div>
-								<button type="button" className="select-button">
-									Últimos 6 meses <ChevronDown size={14} />
-								</button>
-							</div>
-							<div className="chart-summary">
-								<div>
-									<span className="chart-label">Ingresos totales</span>
-									<strong>$45,231.89</strong>
-								</div>
-								<span className="trend up">
-									<ArrowUpRight size={14} /> +20.1%
-								</span>
-							</div>
-							<div className="chart">
-								<div className="chart-y">
-									<span>$10k</span>
-									<span>$8k</span>
-									<span>$6k</span>
-									<span>$4k</span>
-									<span>$2k</span>
-									<span>$0</span>
-								</div>
-								<div className="chart-area">
-									<div className="grid-lines">
-										<i />
-										<i />
-										<i />
-										<i />
-										<i />
-										<i />
-									</div>
-									<svg
-										viewBox="0 0 720 220"
-										preserveAspectRatio="none"
-										role="img"
-										aria-label="Gráfica de ingresos en tendencia ascendente"
-									>
-										<defs>
-											<linearGradient
-												id="chartFill"
-												x1="0"
-												x2="0"
-												y1="0"
-												y2="1"
-											>
-												<stop
-													offset="0%"
-													stopColor="#18181b"
-													stopOpacity=".12"
-												/>
-												<stop
-													offset="100%"
-													stopColor="#18181b"
-													stopOpacity="0"
-												/>
-											</linearGradient>
-										</defs>
-										<path
-											d="M0 178 C35 169 45 159 75 166 S118 145 145 153 S187 122 218 137 S260 105 290 120 S330 117 364 89 S407 99 436 78 S470 90 507 66 S552 72 582 49 S628 57 654 32 S692 43 720 17 L720 220 L0 220Z"
-											fill="url(#chartFill)"
-										/>
-										<path
-											d="M0 178 C35 169 45 159 75 166 S118 145 145 153 S187 122 218 137 S260 105 290 120 S330 117 364 89 S407 99 436 78 S470 90 507 66 S552 72 582 49 S628 57 654 32 S692 43 720 17"
-											fill="none"
-											stroke="#18181b"
-											strokeWidth="2.5"
-											vectorEffect="non-scaling-stroke"
-										/>
-									</svg>
-									<div className="chart-x">
-										<span>May</span>
-										<span>Jun</span>
-										<span>Jul</span>
-										<span>Aug</span>
-										<span>Sep</span>
-										<span>Oct</span>
-									</div>
-								</div>
-							</div>
-						</article>
+      <section className="sales-panel flex items-center gap-4" aria-label="Total de ventas"><span className="rounded-lg bg-muted p-3"><ShoppingCart size={22} /></span><div><p className="text-xs text-muted-foreground">Total de ventas completadas</p><strong className="text-3xl font-semibold tracking-tight">{currency(data.totalSales)}</strong><p className="text-xs text-muted-foreground">Suma de pedidos completados</p></div></section>
 
-						<article className="panel sales-panel">
-							<div className="panel-heading">
-								<div>
-									<h2>Ventas recientes</h2>
-									<p>Has realizado 265 ventas este mes.</p>
-								</div>
-								<button
-									type="button"
-									className="more-button"
-									aria-label="Más opciones"
-								>
-									···
-								</button>
-							</div>
-							<div className="transaction-list">
-								{transactions.map((transaction) => (
-									<div className="transaction" key={transaction.email}>
-										<div className={`transaction-avatar ${transaction.tone}`}>
-											{transaction.initials}
-										</div>
-										<div className="transaction-person">
-											<strong>{transaction.name}</strong>
-											<span>{transaction.email}</span>
-										</div>
-										<strong className="transaction-amount">
-											{transaction.amount}
-										</strong>
-									</div>
-								))}
-							</div>
-							<button type="button" className="outline-button">
-								Ver todas las ventas <ArrowRight size={15} />
-							</button>
-						</article>
-					</section>
+      <div className="sales-grid">
+        <section className="sales-panel"><h2 className="font-semibold">Evolución de ventas mes a mes</h2><p className="mb-5 text-xs text-muted-foreground">Importes de pedidos completados · PEN</p><div className="monthly-chart" role="img" aria-label="Gráfica de ventas mensuales">{data.monthlySales.map((month) => <div className="month-column" key={month.month} title={`${month.month}: ${currency(month.sales)}`}><span className="month-value">{month.sales ? currency(month.sales) : "—"}</span><div className="month-bar-track"><div className="month-bar" style={{ height: `${month.sales ? Math.max(4, month.sales / maxSales * 100) : 0}%` }} /></div><span className="text-xs text-muted-foreground">{month.month.slice(0, 3)}</span></div>)}</div></section>
+        <section className="sales-panel"><h2 className="font-semibold">Productos más vendidos</h2><p className="mb-3 text-xs text-muted-foreground">Ordenados por unidades · SKU</p><div className="space-y-2">{data.products.map((product, index) => <div key={product.sku} className="flex items-center gap-3 border-t pt-2 text-xs"><span className="text-muted-foreground">{String(index + 1).padStart(2, "0")}</span><div className="min-w-0 flex-1"><p className="truncate font-medium" title={product.product}>{product.product || "Sin nombre"}</p><span className="text-muted-foreground">SKU {product.sku}</span></div><span className="whitespace-nowrap font-medium">{product.quantity} uds.</span></div>)}</div></section>
+      </div>
 
-					<section className="panel activity-panel">
-						<div className="panel-heading">
-							<div>
-								<h2>Actividad reciente</h2>
-								<p>Un vistazo a la actividad de tu cuenta.</p>
-							</div>
-							<button type="button" className="select-button">
-								<Download size={14} /> Exportar
-							</button>
-						</div>
-						<div className="activity-row">
-							<span className="activity-dot" />
-							<div>
-								<strong>Nuevo cliente registrado</strong>
-								<p>Emma Wilson se unió a tu plan Pro.</p>
-							</div>
-							<time>Hace 12 min</time>
-						</div>
-						<div className="activity-row">
-							<span className="activity-dot muted-dot" />
-							<div>
-								<strong>Pago recibido</strong>
-								<p>Pago de $299.00 recibido de Isabella Nguyen.</p>
-							</div>
-							<time>Hace 48 min</time>
-						</div>
-					</section>
-					<footer className="dashboard-footer">
-						© 2024 Acme Inc. <span>Privacidad · Términos</span>
-					</footer>
-				</div>
-			</main>
-		</div>
-	);
+      <section className="sales-panel"><h2 className="font-semibold">Ventas por vendedor</h2><p className="mb-4 text-xs text-muted-foreground">Ventas en pedidos completados</p><DataTable columns={sellerColumns} data={data.sellers} filterColumn="name" filterPlaceholder="Buscar vendedor..." /></section>
+      <section className="sales-panel"><h2 className="font-semibold">Pedidos</h2><p className="mb-4 text-xs text-muted-foreground">Selecciona el número de pedido para ver su detalle · {data.orders.length} recientes</p><DataTable columns={orderColumns} data={data.orders} filterColumn="orderNo" filterPlaceholder="Buscar pedido..." onRowClick={(order) => void openOrder(order)} /></section>
+      {data.user.role === "admin" && <section className="sales-panel"><h2 className="font-semibold">Usuarios y permisos</h2><p className="mb-4 text-xs text-muted-foreground">Las cuentas nuevas quedan en espera hasta que se les asigne un rol.</p><DataTable columns={userColumns(data.user.clerkId, saving, (id, role) => void updateRole(id, role))} data={data.managedUsers} filterColumn="email" filterPlaceholder="Buscar correo..." /></section>}
+    </main>
+
+    <Sheet open={Boolean(selectedOrder)} onOpenChange={(open) => { if (!open) setSelectedOrder(null) }}><SheetContent className="w-full overflow-y-auto sm:max-w-lg"><SheetHeader><SheetTitle>Detalle del pedido</SheetTitle><SheetDescription>{selectedOrder?.orderNo}</SheetDescription></SheetHeader>{selectedOrder && <div className="space-y-5 px-4 pb-6 text-sm"><div className="grid grid-cols-2 gap-3 rounded-lg border p-4"><div><p className="text-xs text-muted-foreground">Fecha</p><strong>{shortDate(selectedOrder.date)}</strong></div><div><p className="text-xs text-muted-foreground">Estado</p><strong>{selectedOrder.status}</strong></div><div><p className="text-xs text-muted-foreground">Cliente</p><strong>{selectedOrder.customer || "No indicado"}</strong></div><div><p className="text-xs text-muted-foreground">Vendedor</p><strong>{selectedOrder.seller}</strong></div><div className="col-span-2"><p className="text-xs text-muted-foreground">Canal</p><strong>{selectedOrder.channel || "No indicado"}</strong></div></div><h3 className="font-semibold">Productos</h3>{loading ? <p className="text-muted-foreground">Cargando detalle…</p> : <div className="divide-y rounded-lg border">{details.map((item) => <div key={item.id} className="flex justify-between gap-3 p-3"><div><p className="font-medium">{item.product || "Producto"}</p><p className="text-xs text-muted-foreground">SKU {item.sku} · {item.quantity} uds. · {currency(item.unitPrice)} / ud.</p></div><strong className="whitespace-nowrap">{currency(item.total)}</strong></div>)}</div>}<div className="flex justify-between border-t pt-4 font-semibold"><span>Total</span><span>{currency(selectedOrder.total)}</span></div></div>}</SheetContent></Sheet>
+  </div>
 }
