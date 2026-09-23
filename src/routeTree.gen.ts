@@ -10,20 +10,20 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as DashboardRouteImport } from './routes/dashboard'
+import { Route as DashboardRouteRouteImport } from './routes/dashboard/route'
 import { Route as EsperaRouteImport } from './routes/espera'
 import { Route as DashboardIndexRouteImport } from './routes/dashboard/index'
-import { Route as DashboardPedidosRouteImport } from './routes/dashboard.pedidos'
-import { Route as DashboardProductosRouteImport } from './routes/dashboard.productos'
-import { Route as DashboardUsuariosRouteImport } from './routes/dashboard.usuarios'
-import { Route as DashboardVendedoresRouteImport } from './routes/dashboard.vendedores'
+import { Route as DashboardPedidosRouteImport } from './routes/dashboard/pedidos'
+import { Route as DashboardProductosRouteImport } from './routes/dashboard/productos'
+import { Route as DashboardUsuariosRouteImport } from './routes/dashboard/usuarios'
+import { Route as DashboardVendedoresRouteImport } from './routes/dashboard/vendedores'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const DashboardRoute = DashboardRouteImport.update({
+const DashboardRouteRoute = DashboardRouteRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
   getParentRoute: () => rootRouteImport,
@@ -36,32 +36,32 @@ const EsperaRoute = EsperaRouteImport.update({
 const DashboardIndexRoute = DashboardIndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => DashboardRoute,
+  getParentRoute: () => DashboardRouteRoute,
 } as any)
 const DashboardPedidosRoute = DashboardPedidosRouteImport.update({
   id: '/pedidos',
   path: '/pedidos',
-  getParentRoute: () => DashboardRoute,
+  getParentRoute: () => DashboardRouteRoute,
 } as any)
 const DashboardProductosRoute = DashboardProductosRouteImport.update({
   id: '/productos',
   path: '/productos',
-  getParentRoute: () => DashboardRoute,
+  getParentRoute: () => DashboardRouteRoute,
 } as any)
 const DashboardUsuariosRoute = DashboardUsuariosRouteImport.update({
   id: '/usuarios',
   path: '/usuarios',
-  getParentRoute: () => DashboardRoute,
+  getParentRoute: () => DashboardRouteRoute,
 } as any)
 const DashboardVendedoresRoute = DashboardVendedoresRouteImport.update({
   id: '/vendedores',
   path: '/vendedores',
-  getParentRoute: () => DashboardRoute,
+  getParentRoute: () => DashboardRouteRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/dashboard': typeof DashboardRouteWithChildren
+  '/dashboard': typeof DashboardRouteRouteWithChildren
   '/espera': typeof EsperaRoute
   '/dashboard/pedidos': typeof DashboardPedidosRoute
   '/dashboard/productos': typeof DashboardProductosRoute
@@ -81,7 +81,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/dashboard': typeof DashboardRouteWithChildren
+  '/dashboard': typeof DashboardRouteRouteWithChildren
   '/espera': typeof EsperaRoute
   '/dashboard/pedidos': typeof DashboardPedidosRoute
   '/dashboard/productos': typeof DashboardProductosRoute
@@ -123,7 +123,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  DashboardRoute: typeof DashboardRouteWithChildren
+  DashboardRouteRoute: typeof DashboardRouteRouteWithChildren
   EsperaRoute: typeof EsperaRoute
 }
 
@@ -140,7 +140,7 @@ declare module '@tanstack/react-router' {
       id: '/dashboard'
       path: '/dashboard'
       fullPath: '/dashboard'
-      preLoaderRoute: typeof DashboardRouteImport
+      preLoaderRoute: typeof DashboardRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/espera': {
@@ -155,40 +155,40 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/dashboard/'
       preLoaderRoute: typeof DashboardIndexRouteImport
-      parentRoute: typeof DashboardRoute
+      parentRoute: typeof DashboardRouteRoute
     }
     '/dashboard/pedidos': {
       id: '/dashboard/pedidos'
       path: '/pedidos'
       fullPath: '/dashboard/pedidos'
       preLoaderRoute: typeof DashboardPedidosRouteImport
-      parentRoute: typeof DashboardRoute
+      parentRoute: typeof DashboardRouteRoute
     }
     '/dashboard/productos': {
       id: '/dashboard/productos'
       path: '/productos'
       fullPath: '/dashboard/productos'
       preLoaderRoute: typeof DashboardProductosRouteImport
-      parentRoute: typeof DashboardRoute
+      parentRoute: typeof DashboardRouteRoute
     }
     '/dashboard/usuarios': {
       id: '/dashboard/usuarios'
       path: '/usuarios'
       fullPath: '/dashboard/usuarios'
       preLoaderRoute: typeof DashboardUsuariosRouteImport
-      parentRoute: typeof DashboardRoute
+      parentRoute: typeof DashboardRouteRoute
     }
     '/dashboard/vendedores': {
       id: '/dashboard/vendedores'
       path: '/vendedores'
       fullPath: '/dashboard/vendedores'
       preLoaderRoute: typeof DashboardVendedoresRouteImport
-      parentRoute: typeof DashboardRoute
+      parentRoute: typeof DashboardRouteRoute
     }
   }
 }
 
-interface DashboardRouteChildren {
+interface DashboardRouteRouteChildren {
   DashboardPedidosRoute: typeof DashboardPedidosRoute
   DashboardProductosRoute: typeof DashboardProductosRoute
   DashboardUsuariosRoute: typeof DashboardUsuariosRoute
@@ -196,7 +196,7 @@ interface DashboardRouteChildren {
   DashboardIndexRoute: typeof DashboardIndexRoute
 }
 
-const DashboardRouteChildren: DashboardRouteChildren = {
+const DashboardRouteRouteChildren: DashboardRouteRouteChildren = {
   DashboardPedidosRoute: DashboardPedidosRoute,
   DashboardProductosRoute: DashboardProductosRoute,
   DashboardUsuariosRoute: DashboardUsuariosRoute,
@@ -204,13 +204,13 @@ const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardIndexRoute: DashboardIndexRoute,
 }
 
-const DashboardRouteWithChildren = DashboardRoute._addFileChildren(
-  DashboardRouteChildren,
+const DashboardRouteRouteWithChildren = DashboardRouteRoute._addFileChildren(
+  DashboardRouteRouteChildren,
 )
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  DashboardRoute: DashboardRouteWithChildren,
+  DashboardRouteRoute: DashboardRouteRouteWithChildren,
   EsperaRoute: EsperaRoute,
 }
 export const routeTree = rootRouteImport
