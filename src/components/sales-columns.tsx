@@ -1,8 +1,8 @@
 import { createColumnHelper } from "@tanstack/react-table";
 import { ArrowUpDown } from "lucide-react";
-import { Button } from "./ui/button";
+import type { getSalesDashboard } from "../server/users";
 import type { DataTableFeatures } from "./data-table-features";
-import type { getSalesDashboard, AppRole } from "../server/users";
+import { Button } from "./ui/button";
 
 type SalesData = Awaited<ReturnType<typeof getSalesDashboard>>;
 export type Seller = SalesData["sellers"][number];
@@ -92,54 +92,10 @@ export const orderColumns = order.columns([
 ]);
 
 const managedUser = createColumnHelper<DataTableFeatures, ManagedUser>();
-export function userColumns(
-	currentUserId: string,
-	saving: string | null,
-	updateRole: (id: string, role: AppRole | null) => void,
-) {
-	return managedUser.columns([
-		managedUser.accessor("name", {
-			header: "Usuario",
-			cell: ({ row }) => row.original.name || "Sin nombre",
-		}),
-		managedUser.accessor("email", { header: "Correo" }),
-		managedUser.accessor("createdAt", {
-			header: "Alta",
-			cell: ({ row }) =>
-				new Intl.DateTimeFormat("es-PE", { dateStyle: "medium" }).format(
-					new Date(row.original.createdAt),
-				),
-		}),
-		managedUser.accessor("role", {
-			header: "Rol",
-			cell: ({ row }) => (
-				<>
-					<label className="sr-only" htmlFor={`role-${row.original.clerkId}`}>
-						Rol de {row.original.name || row.original.email}
-					</label>
-					<select
-						id={`role-${row.original.clerkId}`}
-						className="h-8 rounded-md border border-input bg-background px-2 text-xs"
-						value={row.original.role ?? "pending"}
-						disabled={
-							saving === row.original.clerkId ||
-							currentUserId === row.original.clerkId
-						}
-						onChange={(event) =>
-							updateRole(
-								row.original.clerkId,
-								event.target.value === "pending"
-									? null
-									: (event.target.value as AppRole),
-							)
-						}
-					>
-						<option value="pending">En espera</option>
-						<option value="reader">Lectura</option>
-						<option value="admin">Administrador</option>
-					</select>
-				</>
-			),
-		}),
-	]);
-}
+export const userColumns = managedUser.columns([
+	managedUser.accessor("name", {
+		header: "Usuario",
+		cell: ({ row }) => row.original.name || "Sin nombre",
+	}),
+	managedUser.accessor("email", { header: "Correo" }),
+]);

@@ -14,7 +14,7 @@ export const users = pgTable(
 		clerkId: text("clerk_id").notNull(),
 		email: text("email").notNull(),
 		name: text("name").notNull().default(""),
-		role: text("role"),
+		role: text("role").$type<"admin" | "reader">(),
 		createdAt: timestamp("created_at", { withTimezone: true })
 			.notNull()
 			.defaultNow(),

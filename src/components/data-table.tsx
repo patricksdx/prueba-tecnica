@@ -1,10 +1,12 @@
-import { useState } from "react";
 import {
-	useTable,
 	type ColumnDef,
 	type RowData,
 	type SortingState,
+	useTable,
 } from "@tanstack/react-table";
+import { CalendarDays } from "lucide-react";
+import { useState } from "react";
+import { type DataTableFeatures, features } from "./data-table-features";
 import { Button } from "./ui/button";
 import { Calendar } from "./ui/calendar";
 import {
@@ -15,7 +17,6 @@ import {
 } from "./ui/context-menu";
 import { Input } from "./ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
-import { CalendarDays } from "lucide-react";
 import {
 	Table,
 	TableBody,
@@ -24,7 +25,6 @@ import {
 	TableHeader,
 	TableRow,
 } from "./ui/table";
-import { features, type DataTableFeatures } from "./data-table-features";
 
 type DataTableProps<TData extends RowData> = {
 	columns: ColumnDef<DataTableFeatures, TData>[];
@@ -33,6 +33,7 @@ type DataTableProps<TData extends RowData> = {
 	filterPlaceholder?: string;
 	dateColumn?: string;
 	onRowClick?: (row: TData) => void;
+	rowClickMode?: "row" | "order";
 	emptyMessage?: string;
 };
 
@@ -43,6 +44,7 @@ export function DataTable<TData extends RowData>({
 	filterPlaceholder = "Buscar...",
 	dateColumn,
 	onRowClick,
+	rowClickMode = "order",
 	emptyMessage = "No hay resultados.",
 }: DataTableProps<TData>) {
 	const [sorting, setSorting] = useState<SortingState>([]);
@@ -133,10 +135,42 @@ export function DataTable<TData extends RowData>({
 					<TableBody>
 						{table.getRowModel().rows.length ? (
 							table.getRowModel().rows.map((row) => (
-								<TableRow key={row.id}>
+								<TableRow
+									key={row.id}
+									className={
+										onRowClick && rowClickMode === "row"
+											? "cursor-pointer focus-visible:outline-2 focus-visible:outline-ring"
+											: undefined
+									}
+									tabIndex={
+										onRowClick && rowClickMode === "row" ? 0 : undefined
+									}
+									aria-label={
+										onRowClick && rowClickMode === "row"
+											? "Ver detalles del usuario"
+											: undefined
+									}
+									onClick={
+										onRowClick && rowClickMode === "row"
+											? () => onRowClick(row.original)
+											: undefined
+									}
+									onKeyDown={
+										onRowClick && rowClickMode === "row"
+											? (event) => {
+													if (event.key === "Enter" || event.key === " ") {
+														event.preventDefault();
+														onRowClick(row.original);
+													}
+												}
+											: undefined
+									}
+								>
 									{row.getAllCells().map((cell) => (
 										<TableCell key={cell.id}>
-											{onRowClick && cell.column.id === "orderNo" ? (
+											{onRowClick &&
+											rowClickMode === "order" &&
+											cell.column.id === "orderNo" ? (
 												<ContextMenu>
 													<ContextMenuTrigger asChild>
 														<button

@@ -16,30 +16,30 @@ export const Route = createFileRoute("/espera")({
 function WaitingPage() {
 	const { user } = Route.useRouteContext();
 	return (
-		<main className="waiting-page">
-			<header className="waiting-header">
-				<a className="sales-brand" href="/">
-					<span className="brand-mark">
+		<main className="min-h-screen bg-background">
+			<header className="flex min-h-16 items-center justify-between border-b px-5 py-3 lg:px-12">
+				<a className="inline-flex items-center gap-2.5 text-sm font-semibold text-foreground no-underline" href="/">
+					<span className="grid size-8 place-items-center rounded-lg bg-primary text-primary-foreground">
 						<Command size={17} />
 					</span>{" "}
 					Panel de ventas
 				</a>
 				<UserButton />
 			</header>
-			<section className="waiting-card">
-				<div className="waiting-icon">
+			<section className="mx-auto mt-20 w-[calc(100%-2rem)] max-w-[400px] rounded-lg border bg-card p-8 text-center text-card-foreground">
+				<div className="mx-auto mb-4 grid size-11 place-items-center rounded-full bg-muted">
 					<Clock3 size={25} />
 				</div>
-				<p className="sales-eyebrow">ACCESO PENDIENTE</p>
-				<h1>Tu cuenta está en espera</h1>
-				<p>
+				<p className="text-xs font-semibold tracking-widest text-muted-foreground">ACCESO PENDIENTE</p>
+				<h1 className="mt-2 text-2xl font-semibold">Tu cuenta está en espera</h1>
+				<p className="my-5 text-sm text-muted-foreground">
 					Hola {user.name || user.email}. Un administrador debe asignarte un rol
 					antes de que puedas consultar las ventas.
 				</p>
-				<div className="waiting-user">
-					<span>Cuenta registrada</span>
+				<div className="grid gap-1.5 rounded-lg border p-3 text-left text-xs">
+					<span className="text-muted-foreground">Cuenta registrada</span>
 					<strong>{user.email}</strong>
-					<span>Sin rol asignado</span>
+					<span className="text-muted-foreground">Sin rol asignado</span>
 				</div>
 			</section>
 		</main>

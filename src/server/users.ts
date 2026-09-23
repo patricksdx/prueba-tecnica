@@ -300,11 +300,19 @@ export const getSalesDashboard = createServerFn({ method: "GET" }).handler(
 			return {
 				user,
 				totalSales: completed.reduce((sum, row) => sum + row.total, 0),
-				completedOrders: [...orders.values()].filter((order) => order.status === "Completada").length,
+				completedOrders: [...orders.values()].filter(
+					(order) => order.status === "Completada",
+				).length,
 				unitsSold: completed.reduce((sum, row) => sum + row.quantity, 0),
-				pendingUsers: user.role === "admin"
-					? (await db.select({ value: count() }).from(users).where(sql`${users.role} IS NULL`))[0].value
-					: 0,
+				pendingUsers:
+					user.role === "admin"
+						? (
+								await db
+									.select({ value: count() })
+									.from(users)
+									.where(sql`${users.role} IS NULL`)
+							)[0].value
+						: 0,
 				monthlySales: months,
 				products: [...products.values()]
 					.sort((a, b) => b.quantity - a.quantity)

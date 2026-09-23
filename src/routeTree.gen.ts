@@ -12,6 +12,11 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as EsperaRouteImport } from './routes/espera'
+import { Route as DashboardIndexRouteImport } from './routes/dashboard/index'
+import { Route as DashboardPedidosRouteImport } from './routes/dashboard.pedidos'
+import { Route as DashboardProductosRouteImport } from './routes/dashboard.productos'
+import { Route as DashboardUsuariosRouteImport } from './routes/dashboard.usuarios'
+import { Route as DashboardVendedoresRouteImport } from './routes/dashboard.vendedores'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -28,34 +33,97 @@ const EsperaRoute = EsperaRouteImport.update({
   path: '/espera',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DashboardIndexRoute = DashboardIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardPedidosRoute = DashboardPedidosRouteImport.update({
+  id: '/pedidos',
+  path: '/pedidos',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardProductosRoute = DashboardProductosRouteImport.update({
+  id: '/productos',
+  path: '/productos',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardUsuariosRoute = DashboardUsuariosRouteImport.update({
+  id: '/usuarios',
+  path: '/usuarios',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardVendedoresRoute = DashboardVendedoresRouteImport.update({
+  id: '/vendedores',
+  path: '/vendedores',
+  getParentRoute: () => DashboardRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/dashboard': typeof DashboardRoute
+  '/dashboard': typeof DashboardRouteWithChildren
   '/espera': typeof EsperaRoute
+  '/dashboard/pedidos': typeof DashboardPedidosRoute
+  '/dashboard/productos': typeof DashboardProductosRoute
+  '/dashboard/usuarios': typeof DashboardUsuariosRoute
+  '/dashboard/vendedores': typeof DashboardVendedoresRoute
+  '/dashboard/': typeof DashboardIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/dashboard': typeof DashboardRoute
   '/espera': typeof EsperaRoute
+  '/dashboard/pedidos': typeof DashboardPedidosRoute
+  '/dashboard/productos': typeof DashboardProductosRoute
+  '/dashboard/usuarios': typeof DashboardUsuariosRoute
+  '/dashboard/vendedores': typeof DashboardVendedoresRoute
+  '/dashboard': typeof DashboardIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/dashboard': typeof DashboardRoute
+  '/dashboard': typeof DashboardRouteWithChildren
   '/espera': typeof EsperaRoute
+  '/dashboard/pedidos': typeof DashboardPedidosRoute
+  '/dashboard/productos': typeof DashboardProductosRoute
+  '/dashboard/usuarios': typeof DashboardUsuariosRoute
+  '/dashboard/vendedores': typeof DashboardVendedoresRoute
+  '/dashboard/': typeof DashboardIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/dashboard' | '/espera'
+  fullPaths:
+    | '/'
+    | '/dashboard'
+    | '/espera'
+    | '/dashboard/pedidos'
+    | '/dashboard/productos'
+    | '/dashboard/usuarios'
+    | '/dashboard/vendedores'
+    | '/dashboard/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/dashboard' | '/espera'
-  id: '__root__' | '/' | '/dashboard' | '/espera'
+  to:
+    | '/'
+    | '/espera'
+    | '/dashboard/pedidos'
+    | '/dashboard/productos'
+    | '/dashboard/usuarios'
+    | '/dashboard/vendedores'
+    | '/dashboard'
+  id:
+    | '__root__'
+    | '/'
+    | '/dashboard'
+    | '/espera'
+    | '/dashboard/pedidos'
+    | '/dashboard/productos'
+    | '/dashboard/usuarios'
+    | '/dashboard/vendedores'
+    | '/dashboard/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  DashboardRoute: typeof DashboardRoute
+  DashboardRoute: typeof DashboardRouteWithChildren
   EsperaRoute: typeof EsperaRoute
 }
 
@@ -82,12 +150,67 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EsperaRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/dashboard/': {
+      id: '/dashboard/'
+      path: '/'
+      fullPath: '/dashboard/'
+      preLoaderRoute: typeof DashboardIndexRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/pedidos': {
+      id: '/dashboard/pedidos'
+      path: '/pedidos'
+      fullPath: '/dashboard/pedidos'
+      preLoaderRoute: typeof DashboardPedidosRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/productos': {
+      id: '/dashboard/productos'
+      path: '/productos'
+      fullPath: '/dashboard/productos'
+      preLoaderRoute: typeof DashboardProductosRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/usuarios': {
+      id: '/dashboard/usuarios'
+      path: '/usuarios'
+      fullPath: '/dashboard/usuarios'
+      preLoaderRoute: typeof DashboardUsuariosRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/vendedores': {
+      id: '/dashboard/vendedores'
+      path: '/vendedores'
+      fullPath: '/dashboard/vendedores'
+      preLoaderRoute: typeof DashboardVendedoresRouteImport
+      parentRoute: typeof DashboardRoute
+    }
   }
 }
 
+interface DashboardRouteChildren {
+  DashboardPedidosRoute: typeof DashboardPedidosRoute
+  DashboardProductosRoute: typeof DashboardProductosRoute
+  DashboardUsuariosRoute: typeof DashboardUsuariosRoute
+  DashboardVendedoresRoute: typeof DashboardVendedoresRoute
+  DashboardIndexRoute: typeof DashboardIndexRoute
+}
+
+const DashboardRouteChildren: DashboardRouteChildren = {
+  DashboardPedidosRoute: DashboardPedidosRoute,
+  DashboardProductosRoute: DashboardProductosRoute,
+  DashboardUsuariosRoute: DashboardUsuariosRoute,
+  DashboardVendedoresRoute: DashboardVendedoresRoute,
+  DashboardIndexRoute: DashboardIndexRoute,
+}
+
+const DashboardRouteWithChildren = DashboardRoute._addFileChildren(
+  DashboardRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  DashboardRoute: DashboardRoute,
+  DashboardRoute: DashboardRouteWithChildren,
   EsperaRoute: EsperaRoute,
 }
 export const routeTree = rootRouteImport

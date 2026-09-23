@@ -227,6 +227,8 @@ Configura `CLERK_ADMIN_IDS` con el ID Clerk del primer administrador: todos los 
 
 Las tablas utilizan shadcn/ui y TanStack Table v9: búsqueda, ordenación, paginación y filtro de fecha para pedidos. El número de pedido abre un Sheet con su detalle y tiene menú contextual al hacer clic derecho.
 
+El dashboard incluye un resumen con ventas totales, pedidos completados, ticket medio y unidades vendidas; gráficos mensuales y accesos a las vistas de pedidos, productos, vendedores y, para administradores, usuarios. Usa Card, Chart, Tabs, Sidebar, Badge y Sheet de shadcn/ui.
+
 Las ventas, los pedidos y los perfiles de usuario se consultan desde PostgreSQL.
 
 ## Despliegue con Docker Compose
