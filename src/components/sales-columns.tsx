@@ -1,13 +1,16 @@
 import { createColumnHelper } from "@tanstack/react-table";
 import { ArrowUpDown } from "lucide-react";
-import type { getSalesDashboard } from "../server/users";
+import type {
+	DashboardOrder,
+	ManagedUserDto,
+	SellerSummary,
+} from "../types/sales";
 import type { DataTableFeatures } from "./data-table-features";
 import { Button } from "./ui/button";
 
-type SalesData = Awaited<ReturnType<typeof getSalesDashboard>>;
-export type Seller = SalesData["sellers"][number];
-export type Order = SalesData["orders"][number];
-export type ManagedUser = SalesData["managedUsers"][number];
+export type Seller = SellerSummary;
+export type Order = DashboardOrder;
+export type ManagedUser = ManagedUserDto;
 
 export const currency = (cents: number) =>
 	new Intl.NumberFormat("es-PE", {

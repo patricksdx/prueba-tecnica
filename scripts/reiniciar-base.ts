@@ -8,7 +8,18 @@ try {
 	// Las migraciones iniciales deben aplicarse sobre una base sin estas tablas.
 	// El historial de Drizzle también se borra para poder aplicarlas desde cero.
 	await client.begin(async (sql) => {
-		await sql`DROP TABLE IF EXISTS sales_lines, users`;
+		await sql`DROP TABLE IF EXISTS
+			sales_control_entries,
+			customer_advances,
+			reported_summaries,
+			sales_order_lines,
+			sales_orders,
+			sales_lines,
+			products,
+			customers,
+			sellers,
+			import_batches,
+			users`;
 		const [{ exists }] = await sql<{ exists: string | null }[]>`
 			SELECT to_regclass('drizzle.__drizzle_migrations')::text AS exists
 		`;

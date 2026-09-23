@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as DashboardRouteRouteImport } from './routes/dashboard/route'
 import { Route as EsperaRouteImport } from './routes/espera'
 import { Route as DashboardIndexRouteImport } from './routes/dashboard/index'
+import { Route as DashboardConciliacionRouteImport } from './routes/dashboard/conciliacion'
 import { Route as DashboardPedidosRouteImport } from './routes/dashboard/pedidos'
 import { Route as DashboardProductosRouteImport } from './routes/dashboard/productos'
 import { Route as DashboardUsuariosRouteImport } from './routes/dashboard/usuarios'
@@ -36,6 +37,11 @@ const EsperaRoute = EsperaRouteImport.update({
 const DashboardIndexRoute = DashboardIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => DashboardRouteRoute,
+} as any)
+const DashboardConciliacionRoute = DashboardConciliacionRouteImport.update({
+  id: '/conciliacion',
+  path: '/conciliacion',
   getParentRoute: () => DashboardRouteRoute,
 } as any)
 const DashboardPedidosRoute = DashboardPedidosRouteImport.update({
@@ -63,6 +69,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRouteRouteWithChildren
   '/espera': typeof EsperaRoute
+  '/dashboard/conciliacion': typeof DashboardConciliacionRoute
   '/dashboard/pedidos': typeof DashboardPedidosRoute
   '/dashboard/productos': typeof DashboardProductosRoute
   '/dashboard/usuarios': typeof DashboardUsuariosRoute
@@ -72,6 +79,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/espera': typeof EsperaRoute
+  '/dashboard/conciliacion': typeof DashboardConciliacionRoute
   '/dashboard/pedidos': typeof DashboardPedidosRoute
   '/dashboard/productos': typeof DashboardProductosRoute
   '/dashboard/usuarios': typeof DashboardUsuariosRoute
@@ -83,6 +91,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRouteRouteWithChildren
   '/espera': typeof EsperaRoute
+  '/dashboard/conciliacion': typeof DashboardConciliacionRoute
   '/dashboard/pedidos': typeof DashboardPedidosRoute
   '/dashboard/productos': typeof DashboardProductosRoute
   '/dashboard/usuarios': typeof DashboardUsuariosRoute
@@ -95,6 +104,7 @@ export interface FileRouteTypes {
     | '/'
     | '/dashboard'
     | '/espera'
+    | '/dashboard/conciliacion'
     | '/dashboard/pedidos'
     | '/dashboard/productos'
     | '/dashboard/usuarios'
@@ -104,6 +114,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/espera'
+    | '/dashboard/conciliacion'
     | '/dashboard/pedidos'
     | '/dashboard/productos'
     | '/dashboard/usuarios'
@@ -114,6 +125,7 @@ export interface FileRouteTypes {
     | '/'
     | '/dashboard'
     | '/espera'
+    | '/dashboard/conciliacion'
     | '/dashboard/pedidos'
     | '/dashboard/productos'
     | '/dashboard/usuarios'
@@ -157,6 +169,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DashboardIndexRouteImport
       parentRoute: typeof DashboardRouteRoute
     }
+    '/dashboard/conciliacion': {
+      id: '/dashboard/conciliacion'
+      path: '/conciliacion'
+      fullPath: '/dashboard/conciliacion'
+      preLoaderRoute: typeof DashboardConciliacionRouteImport
+      parentRoute: typeof DashboardRouteRoute
+    }
     '/dashboard/pedidos': {
       id: '/dashboard/pedidos'
       path: '/pedidos'
@@ -189,6 +208,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface DashboardRouteRouteChildren {
+  DashboardConciliacionRoute: typeof DashboardConciliacionRoute
   DashboardPedidosRoute: typeof DashboardPedidosRoute
   DashboardProductosRoute: typeof DashboardProductosRoute
   DashboardUsuariosRoute: typeof DashboardUsuariosRoute
@@ -197,6 +217,7 @@ interface DashboardRouteRouteChildren {
 }
 
 const DashboardRouteRouteChildren: DashboardRouteRouteChildren = {
+  DashboardConciliacionRoute: DashboardConciliacionRoute,
   DashboardPedidosRoute: DashboardPedidosRoute,
   DashboardProductosRoute: DashboardProductosRoute,
   DashboardUsuariosRoute: DashboardUsuariosRoute,

@@ -29,8 +29,11 @@ import {
 	type AppRole,
 	changeUserRole,
 	getOrderDetails,
-	type getSalesDashboard,
 } from "../server/users";
+import type {
+	OrderLineDetail,
+	SalesDashboardDto,
+} from "../types/sales";
 import { DataTable } from "./data-table";
 import {
 	currency,
@@ -90,14 +93,21 @@ import {
 } from "./ui/sidebar";
 import { Tabs, TabsContent } from "./ui/tabs";
 
-type SalesData = Awaited<ReturnType<typeof getSalesDashboard>>;
-type OrderDetails = Awaited<ReturnType<typeof getOrderDetails>>;
-export type Page = "overview" | "orders" | "products" | "sellers" | "users";
+type SalesData = SalesDashboardDto;
+type OrderDetails = OrderLineDetail[];
+export type Page =
+	| "overview"
+	| "orders"
+	| "products"
+	| "sellers"
+	| "reconciliation"
+	| "users";
 const paths = {
 	overview: "/dashboard",
 	orders: "/dashboard/pedidos",
 	products: "/dashboard/productos",
 	sellers: "/dashboard/vendedores",
+	reconciliation: "/dashboard/conciliacion",
 	users: "/dashboard/usuarios",
 } as const;
 
@@ -131,6 +141,7 @@ export function DashboardView({ data, page }: { data: SalesData; page: Page }) {
 		{ value: "orders", label: "Pedidos", icon: ReceiptText },
 		{ value: "products", label: "Productos", icon: Boxes },
 		{ value: "sellers", label: "Vendedores", icon: UsersRound },
+		{ value: "reconciliation", label: "Conciliación", icon: Activity },
 		...(data.user.role === "admin"
 			? [{ value: "users", label: "Usuarios", icon: ShieldCheck }]
 			: []),
@@ -140,6 +151,7 @@ export function DashboardView({ data, page }: { data: SalesData; page: Page }) {
 		orders: "Pedidos",
 		products: "Productos",
 		sellers: "Vendedores",
+		reconciliation: "Conciliación control vs detalle",
 		users: "Usuarios y permisos",
 	};
 
@@ -637,6 +649,151 @@ export function DashboardView({ data, page }: { data: SalesData; page: Page }) {
 								</CardContent>
 							</Card>
 						</TabsContent>
+						<TabsContent value="reconciliation">
+							<div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+								<Metric
+									title="Pedidos conciliados"
+									value={data.reconciliation.matched.toLocaleString("es-PE")}
+									hint="Existen en detalle y control"
+									icon={CircleCheck}
+								/>
+								<Metric
+									title="Solo en control"
+									value={data.reconciliation.onlyControl.toLocaleString("es-PE")}
+									hint="No están en el detalle"
+									icon={Activity}
+								/>
+								<Metric
+									title="Solo en detalle"
+									value={data.reconciliation.onlyDetail.toLocaleString("es-PE")}
+									hint="No aparecen en control"
+									icon={ReceiptText}
+								/>
+								<Metric
+									title="Anulados en control"
+									value={data.reconciliation.cancelledControl.toLocaleString("es-PE")}
+									hint="Marcados anulado/canceló"
+									icon={ShieldCheck}
+								/>
+							</div>
+							<div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(300px,1fr)]">
+								<Card>
+									<CardHeader>
+										<CardTitle>Diferencias de importe</CardTitle>
+										<CardDescription>
+											El detalle manda; el control solo compara. Primeras 100
+											coincidencias con distinto total.
+										</CardDescription>
+									</CardHeader>
+									<CardContent>
+										{data.reconciliation.amountDiffs.length === 0 ? (
+											<p className="text-sm text-muted-foreground">
+												Sin diferencias entre control y detalle.
+											</p>
+										) : (
+											<div className="divide-y rounded-lg border">
+												{data.reconciliation.amountDiffs.map((diff) => (
+													<div
+														key={diff.orderNo}
+														className="flex flex-wrap items-center justify-between gap-2 p-3 text-sm"
+													>
+														<div>
+															<p className="font-medium">{diff.orderNo}</p>
+															<p className="text-xs text-muted-foreground">
+																{diff.seller} · {diff.date}
+																{diff.status ? ` · ${diff.status}` : ""}
+															</p>
+														</div>
+														<div className="text-right text-xs">
+															<p>
+																Control:{" "}
+																{diff.controlAmount == null
+																	? "—"
+																	: currency(diff.controlAmount)}
+															</p>
+															<p className="font-medium">
+																Detalle: {currency(diff.detailTotal)}
+															</p>
+														</div>
+													</div>
+												))}
+											</div>
+										)}
+									</CardContent>
+								</Card>
+								<Card>
+									<CardHeader>
+										<CardTitle>Adelantos</CardTitle>
+										<CardDescription>
+											Hoja Adelanto: registros tal cual, sin heredar cliente.
+										</CardDescription>
+									</CardHeader>
+									<CardContent className="space-y-3">
+										{data.reconciliation.advances.length === 0 ? (
+											<p className="text-sm text-muted-foreground">
+												Sin adelantos registrados.
+											</p>
+										) : (
+											data.reconciliation.advances.slice(0, 20).map((adv) => (
+												<div
+													key={`${adv.document}|${adv.customer}|${adv.advance}|${adv.outstanding}|${adv.note}`}
+													className="flex justify-between gap-3 rounded-lg border p-3 text-sm"
+												>
+													<div>
+														<p className="font-medium">
+															{adv.customer || "Sin cliente"}
+														</p>
+														<p className="text-xs text-muted-foreground">
+															DNI {adv.document || "—"}
+															{adv.note ? ` · ${adv.note}` : ""}
+														</p>
+													</div>
+													<div className="text-right text-xs">
+														<p>Adelanto {currency(adv.advance)}</p>
+														<p>Falta {currency(adv.outstanding)}</p>
+													</div>
+												</div>
+											))
+										)}
+									</CardContent>
+								</Card>
+							</div>
+							<Card className="mt-4">
+								<CardHeader>
+									<CardTitle>Totales declarados</CardTitle>
+									<CardDescription>
+										Hojas Totales y Resumen: se conservan para comparar, no
+										reemplazan las ventas del detalle.
+									</CardDescription>
+								</CardHeader>
+								<CardContent>
+									{data.reconciliation.summaries.length === 0 ? (
+										<p className="text-sm text-muted-foreground">
+											Sin totales declarados.
+										</p>
+									) : (
+										<div className="divide-y rounded-lg border">
+											{data.reconciliation.summaries.slice(0, 40).map((sum) => (
+												<div
+													key={`${sum.sheet}|${sum.label}|${sum.period}|${sum.total}`}
+													className="flex flex-wrap items-center justify-between gap-2 p-3 text-sm"
+												>
+													<div>
+														<p className="font-medium">{sum.label}</p>
+														<p className="text-xs text-muted-foreground">
+															{sum.sheet}
+															{sum.period ? ` · ${sum.period}` : ""}
+															{sum.orders != null ? ` · ${sum.orders} pedidos` : ""}
+														</p>
+													</div>
+													<strong>{currency(sum.total)}</strong>
+												</div>
+											))}
+										</div>
+									)}
+								</CardContent>
+							</Card>
+						</TabsContent>
 						{data.user.role === "admin" && (
 							<TabsContent value="users">
 								<div className="space-y-4">
@@ -705,9 +862,21 @@ export function DashboardView({ data, page }: { data: SalesData; page: Page }) {
 									<p className="text-xs text-muted-foreground">Vendedor</p>
 									<strong>{selectedOrder.seller}</strong>
 								</div>
-								<div className="col-span-2">
+								<div>
 									<p className="text-xs text-muted-foreground">Canal</p>
 									<strong>{selectedOrder.channel || "No indicado"}</strong>
+								</div>
+								<div>
+									<p className="text-xs text-muted-foreground">Líneas</p>
+									<strong>{selectedOrder.count}</strong>
+								</div>
+								<div>
+									<p className="text-xs text-muted-foreground">Medio de pago</p>
+									<strong>{selectedOrder.payment || "No indicado"}</strong>
+								</div>
+								<div>
+									<p className="text-xs text-muted-foreground">Distrito</p>
+									<strong>{selectedOrder.district || "No indicado"}</strong>
 								</div>
 							</div>
 							<h3 className="font-semibold">Productos</h3>
@@ -727,6 +896,10 @@ export function DashboardView({ data, page }: { data: SalesData; page: Page }) {
 												<p className="text-xs text-muted-foreground">
 													SKU {item.sku} · {item.quantity} uds. ·{" "}
 													{currency(item.unitPrice)} / ud.
+													{item.brand || item.category
+														? ` · ${[item.brand, item.category].filter(Boolean).join(" / ")}`
+														: ""}
+													{item.unitPrice === 0 ? " · Precio 0" : ""}
 												</p>
 											</div>
 											<strong className="whitespace-nowrap">

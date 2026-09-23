@@ -1,259 +1,164 @@
-Welcome to your new TanStack Start app!
-
-# Getting Started
-
-To run this application:
-
-```bash
-bun install
-bun --bun run dev
-```
-
-# Building For Production
-
-To build this application for production:
-
-```bash
-bun --bun run build
-```
-
-## Styling
-
-This project uses [Tailwind CSS](https://tailwindcss.com/) for styling.
-
-### Removing Tailwind CSS
-
-If you prefer not to use Tailwind CSS:
-
-1. Remove the demo pages in `src/routes/demo/`
-2. Replace the Tailwind import in `src/styles.css` with your own styles
-3. Remove `tailwindcss()` from the plugins array in `vite.config.ts`
-4. Remove `@tailwindcss/vite` and `tailwindcss` from `package.json`
-
-## Linting & Formatting
-
-This project uses [Biome](https://biomejs.dev/) for linting and formatting. The following scripts are available:
-
-
-```bash
-bun --bun run lint
-bun --bun run format
-bun --bun run check
-```
-
-
-## Deploy with Nitro
-
-This project uses Nitro as a generic server adapter, so it can run on any Node-compatible host.
-
-```bash
-npm run build
-node dist/server/index.mjs
-```
-
-The build output is a self-contained Node server. To deploy, push the `dist/` directory to your host (Render, Fly.io, your own VPS, etc.) and run the server command above.
-
-For host-specific presets (Vercel, Netlify, Cloudflare, AWS Lambda, etc.) and tuning, see https://v3.nitro.build/deploy.
-
-
-
-## Routing
-
-This project uses [TanStack Router](https://tanstack.com/router) with file-based routing. Routes are managed as files in `src/routes`.
-
-### Adding A Route
-
-To add a new route to your application just add a new file in the `./src/routes` directory.
-
-TanStack will automatically generate the content of the route file for you.
-
-Now that you have two routes you can use a `Link` component to navigate between them.
-
-### Adding Links
-
-To use SPA (Single Page Application) navigation you will need to import the `Link` component from `@tanstack/react-router`.
-
-```tsx
-import { Link } from "@tanstack/react-router";
-```
-
-Then anywhere in your JSX you can use it like so:
-
-```tsx
-<Link to="/about">About</Link>
-```
-
-This will create a link that will navigate to the `/about` route.
-
-More information on the `Link` component can be found in the [Link documentation](https://tanstack.com/router/v1/docs/framework/react/api/router/linkComponent).
-
-### Using A Layout
-
-In the File Based Routing setup the layout is located in `src/routes/__root.tsx`. Anything you add to the root route will appear in all the routes. The route content will appear in the JSX where you render `{children}` in the `shellComponent`.
-
-Here is an example layout that includes a header:
-
-```tsx
-import { HeadContent, Scripts, createRootRoute } from '@tanstack/react-router'
-
-export const Route = createRootRoute({
-  head: () => ({
-    meta: [
-      { charSet: 'utf-8' },
-      { name: 'viewport', content: 'width=device-width, initial-scale=1' },
-      { title: 'My App' },
-    ],
-  }),
-  shellComponent: ({ children }) => (
-    <html lang="en">
-      <head>
-        <HeadContent />
-      </head>
-      <body>
-        <header>
-          <nav>
-            <Link to="/">Home</Link>
-            <Link to="/about">About</Link>
-          </nav>
-        </header>
-        {children}
-        <Scripts />
-      </body>
-    </html>
-  ),
-})
-```
-
-More information on layouts can be found in the [Layouts documentation](https://tanstack.com/router/latest/docs/framework/react/guide/routing-concepts#layouts).
-
-## Server Functions
-
-TanStack Start provides server functions that allow you to write server-side code that seamlessly integrates with your client components.
-
-```tsx
-import { createServerFn } from '@tanstack/react-start'
-
-const getServerTime = createServerFn({
-  method: 'GET',
-}).handler(async () => {
-  return new Date().toISOString()
-})
-
-// Use in a component
-function MyComponent() {
-  const [time, setTime] = useState('')
-  
-  useEffect(() => {
-    getServerTime().then(setTime)
-  }, [])
-  
-  return <div>Server time: {time}</div>
-}
-```
-
-## API Routes
-
-You can create API routes by using the `server` property in your route definitions:
-
-```tsx
-import { createFileRoute } from '@tanstack/react-router'
-import { json } from '@tanstack/react-start'
-
-export const Route = createFileRoute('/api/hello')({
-  server: {
-    handlers: {
-      GET: () => json({ message: 'Hello, World!' }),
-    },
-  },
-})
-```
-
-## Data Fetching
-
-There are multiple ways to fetch data in your application. You can use TanStack Query to fetch data from a server. But you can also use the `loader` functionality built into TanStack Router to load the data for a route before it's rendered.
-
-For example:
-
-```tsx
-import { createFileRoute } from '@tanstack/react-router'
-
-export const Route = createFileRoute('/people')({
-  loader: async () => {
-    const response = await fetch('https://swapi.dev/api/people')
-    return response.json()
-  },
-  component: PeopleComponent,
-})
-
-function PeopleComponent() {
-  const data = Route.useLoaderData()
-  return (
-    <ul>
-      {data.results.map((person) => (
-        <li key={person.name}>{person.name}</li>
-      ))}
-    </ul>
-  )
-}
-```
-
-Loaders simplify your data fetching logic dramatically. Check out more information in the [Loader documentation](https://tanstack.com/router/latest/docs/framework/react/guide/data-loading#loader-parameters).
-
-
-# Demo files
-
-Files prefixed with `demo` can be safely deleted. They are there to provide a starting point for you to play around with the features you've installed.
-
-
-# Learn More
-
-You can learn more about all of the offerings from TanStack in the [TanStack documentation](https://tanstack.com).
-
-For TanStack Start specific documentation, visit [TanStack Start](https://tanstack.com/start).
-# Dashboard Acme
-
-La ruta `/` contiene solamente el inicio de sesión de Clerk. El dashboard vive en `/dashboard` y exige una sesión válida. Al entrar, el servidor consulta al usuario en Clerk y sincroniza su ID, correo y nombre en PostgreSQL usando Drizzle.
+# Panel de ventas — Acme Inc.
+
+Aplicación interna de visualización y conciliación de ventas construida con **TanStack Start (React + Vite + Nitro)**, autenticación con **Clerk**, base de datos **PostgreSQL** con **Drizzle ORM**, UI con **shadcn/ui + Tailwind CSS v4**, tablas con **TanStack Table** y gráficos con **Recharts**.
+
+- `/` — solo inicio de sesión (modal de Clerk, con Google como proveedor social).
+- `/dashboard` — resumen y vistas comerciales. Requiere sesión válida con rol asignado.
+- `/espera` — página para usuarios recién registrados sin rol.
+- `/dashboard/pedidos`, `/productos`, `/vendedores`, `/conciliacion` — vistas de detalle.
+- `/dashboard/usuarios` — solo administradores, asignación de roles.
+
+Al iniciar sesión, el servidor consulta al usuario en Clerk y lo sincroniza en PostgreSQL (`id`, correo y nombre). Los registros nuevos quedan con `role = NULL` (en espera). El primer administrador se promueve con `CLERK_ADMIN_IDS`; desde `/dashboard/usuarios` se asigna `admin`, `reader` o se devuelve a espera.
+
+## Stack
+
+- TanStack Start / Router / Server Functions
+- Clerk `@clerk/tanstack-react-start` (auth + `UserButton`, `SignInButton`)
+- PostgreSQL + `postgres-js` + Drizzle ORM + Drizzle Kit
+- Tailwind CSS v4 + shadcn/ui (Card, Chart, Tabs, Sidebar, Badge, Sheet, etc.)
+- TanStack Table v9, Recharts, `xlsx`, `date-fns`, `lucide-react`
+- Biome (lint/format), Bun, Docker + Docker Compose
+
+## Requisitos
+
+- Bun 1.x
+- PostgreSQL accesible (local o remoto)
+- Cuenta/app en Clerk con Google habilitado como proveedor social
+- Los Excel de origen en `src/assets/`:
+  - `detalle_pedidos_2026.xlsx` (hojas `Detalle` y `Resumen`)
+  - `control_ventas_2026.xlsx` (hojas mensuales, `Totales` y `Adelanto`)
 
 ## Configuración
 
-Define estas variables en el `.env` local (no se sube a Git):
+1. Copia el ejemplo de entorno:
 
-- `VITE_CLERK_PUBLISHABLE_KEY`: clave pública de la aplicación Clerk.
-- `CLERK_SECRET_KEY`: clave secreta de Clerk, solo para el servidor.
-- `DATABASE_URL`: cadena de conexión PostgreSQL.
-- `CLERK_ADMIN_IDS`: IDs de Clerk separados por coma para promover al primer administrador.
+   ```bash
+   cp .env.example .env
+   ```
 
-Configura `CLERK_ADMIN_IDS` con el ID Clerk del primer administrador: todos los registros nuevos comienzan sin rol y quedan en `/espera`; desde administración se les puede asignar `Lectura`, `Administrador` o devolverlos a espera. Activa Google como proveedor social desde la configuración de Clerk para que se ofrezca en el modal de acceso. Ejecuta `bun run dev` para iniciar después de preparar la base de datos.
+2. Variables (` .env` no se sube a Git):
 
-### Esquema y migraciones (Drizzle Kit)
+   | Variable | Requerida | Descripción |
+   |---|---|---|
+   | `VITE_CLERK_PUBLISHABLE_KEY` | Sí | Clave pública de Clerk (se incrusta en el cliente durante el build). |
+   | `CLERK_SECRET_KEY` | Sí | Clave secreta de Clerk, solo servidor. |
+   | `DATABASE_URL` | Sí | Conexión PostgreSQL, ej. `postgresql://usuario:contraseña@host:5432/base_de_datos`. |
+   | `CLERK_ADMIN_IDS` | Para bootstrap | IDs de Clerk separados por coma que se promueven a `admin` al iniciar sesión. |
+   | `APP_PORT` | No (defecto `3000`) | Puerto publicado en el flujo Docker documentado. |
 
-Las tablas se crean con migraciones, no durante las consultas de la web. Con `DATABASE_URL` configurada:
+3. Instala dependencias:
+
+   ```bash
+   bun install
+   ```
+
+## Base de datos (Drizzle Kit)
+
+El esquema vive en `src/server/schema.ts`, las migraciones en `drizzle/`, la configuración en `drizzle.config.ts`.
 
 ```bash
-bun run db:reset        # Primera transición: borra usuarios y ventas anteriores y recrea el esquema
-bun run datos:registrar # Opcional: vuelve a cargar las ventas desde el Excel
-bun run dev
+bun run db:generate   # genera una migración desde cambios en src/server/schema.ts
+bun run db:migrate    # aplica migraciones a DATABASE_URL (no borra datos)
+bun run db:reset      # reinicia: borra users + tablas comerciales + historial Drizzle y re-aplica migraciones
 ```
 
-`db:reset` borra los registros de `users` y `sales_lines` y el historial de migraciones de Drizzle en esa base. La siguiente cuenta que inicie sesión se registrará de nuevo; asegúrate de definir `CLERK_ADMIN_IDS` para recuperar el acceso de administrador. Para una base nueva o futuras versiones usa `bun run db:migrate` sin borrar datos. Si cambias `src/server/schema.ts`, genera otra migración con `bun run db:generate` y aplícala con `bun run db:migrate`.
+`db:reset` (`scripts/reiniciar-base.ts` + `migrate`) elimina `users`, `sales_orders`, `sales_order_lines`, `sellers`, `customers`, `products`, `sales_control_entries`, `customer_advances`, `reported_summaries` y la histórica `sales_lines`. Úsalo para recrear la base actual desde cero. Después del reset, la siguiente cuenta que inicie sesión se registra de nuevo: define `CLERK_ADMIN_IDS` para recuperar el acceso admin.
 
-### Datos de ventas del Excel
+Tablas principales:
 
-La web no importa registros automáticamente. Para cargar manualmente `src/assets/detalle_pedidos_2026.xlsx` en la base indicada por `DATABASE_URL` ejecuta `bun run datos:registrar`. Los registros existentes no se duplican si ejecutas el comando otra vez. Para borrar solamente los registros de ventas (`sales_lines`) y conservar los usuarios (`users`), ejecuta `bun run datos:eliminar`. Después puedes volver a importar el Excel para revisar los detalles en el dashboard.
+- `users` (`clerk_id` único, `role`: `admin | reader | NULL`).
+- Canónica de ventas: `sales_orders` + `sales_order_lines` (identidad estable por `(pedido, nro. línea)`).
+- Dimensiones: `sellers`, `customers`, `products`.
+- Seguimiento/conciliación (no suman al dashboard): `sales_control_entries`, `customer_advances`, `reported_summaries`.
+- Control de idempotencia: `import_batches` (hash SHA-256 por archivo).
+- Histórica denormalizada en transición: `sales_lines`.
 
-Las tablas utilizan shadcn/ui y TanStack Table v9: búsqueda, ordenación, paginación y filtro de fecha para pedidos. El número de pedido abre un Sheet con su detalle y tiene menú contextual al hacer clic derecho.
+## Datos de ventas (Excel)
 
-El dashboard incluye un resumen con ventas totales, pedidos completados, ticket medio y unidades vendidas; gráficos mensuales y accesos a las vistas de pedidos, productos, vendedores y, para administradores, usuarios. Usa Card, Chart, Tabs, Sidebar, Badge y Sheet de shadcn/ui.
+La web no importa automáticamente. Los scripts usan `DATABASE_URL`:
 
-Las ventas, los pedidos y los perfiles de usuario se consultan desde PostgreSQL.
+```bash
+bun run datos:registrar  # carga los dos Excel (idempotente por hash)
+bun run datos:eliminar   # borra solo registros comerciales, conserva users
+```
+
+- `detalle_pedidos_2026.xlsx` (`Detalle`, `Resumen`): única fuente canónica. Cada pedido va a `sales_orders` y sus productos a `sales_order_lines`. Reimportar actualiza correcciones sin duplicar.
+- `control_ventas_2026.xlsx` (mensuales, `Totales`, `Adelanto`): solo seguimiento y conciliación. Va a `sales_control_entries`, `customer_advances` y `reported_summaries`; nunca se suma al dashboard.
+
+Reglas aplicadas por `scripts/registrar-datos.ts`:
+
+- SKU normalizado (se ignora un `/` inicial accidental pero se conserva el original).
+- Vendedor/cliente desconocido como `NULL` (`Sin vendedor` / `No indicado` solo en pantalla).
+- Fechas o importes inválidos rechazan la fila con reporte en consola, sin inventar valores.
+- Cada archivo se registra por hash en `import_batches` para no duplicar la misma versión.
+- Las filas anónimas de `Adelanto` se conservan tal cual, sin heredar cliente.
+
+## Desarrollo
+
+```bash
+bun run dev      # Vite dev en http://localhost:3000
+bun run build    # build de producción (Nitro preset node-server → .output/)
+bun run preview  # previsualiza el build
+```
+
+Consultas de ventas, pedidos y perfiles salen de PostgreSQL vía Server Functions (`src/server/users.ts`, `src/server/sales.ts`).
+
+Funcionalidad del dashboard (`src/components/dashboard-view.tsx` y `src/components/features/`):
+
+- Resumen: ventas totales, pedidos completados, ticket medio y unidades vendidas + gráficos mensuales.
+- Pedidos: TanStack Table con búsqueda, ordenación, paginación y filtro de fecha. El nº de pedido abre un Sheet con detalle (marca, categoría, medio de pago, distrito) y menú contextual con clic derecho.
+- Productos, vendedores, conciliación control vs. detalle y administración de usuarios.
+
+## Calidad de código
+
+```bash
+bun run lint    # biome lint
+bun run format  # biome format
+bun run check   # biome check
+```
 
 ## Despliegue con Docker Compose
 
-1. Copia `.env.example` a `.env` y configura `VITE_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `DATABASE_URL` y `CLERK_ADMIN_IDS`. `APP_PORT` permite cambiar el puerto publicado (por defecto, `3000`).
-2. Para recrear la base actual desde cero, ejecuta `docker compose run --rm datos bun run db:reset` (elimina usuarios y ventas). Si ya está vacía, usa `docker compose run --rm datos bun run db:migrate`.
-3. Si quieres cargar los datos del Excel, ejecuta `docker compose run --rm datos bun run datos:registrar`.
-4. Ejecuta `docker compose up --build -d` y abre `http://localhost:3000` (o el puerto indicado en `APP_PORT`).
+`Dockerfile` tiene etapa `build` (Bun → `bun run build` → `.output/`) y etapa `datos` (Bun + scripts + assets para importaciones).
 
-`DATABASE_URL` debe apuntar a una instancia PostgreSQL accesible desde el contenedor. Si PostgreSQL corre en la máquina anfitriona, usa `host.docker.internal` como host de la conexión en lugar de `localhost`; en otro servidor, usa su dirección accesible desde Docker. La base de datos debe permitir crear tablas e índices. Para borrar solo ventas y conservar usuarios usa `docker compose run --rm datos bun run datos:eliminar`. El servicio de mantenimiento solo se inicia al ejecutar uno de esos comandos.
+```bash
+cp .env.example .env   # y configura las 4 variables (+ APP_PORT opcional)
+docker compose run --rm datos bun run db:reset        # desde cero (borra usuarios y ventas)
+# o bien, si la base ya está vacía:
+docker compose run --rm datos bun run db:migrate
+docker compose run --rm datos bun run datos:registrar # opcional, carga los Excel
+docker compose up --build -d                          # app en http://localhost:3000 (o APP_PORT)
+docker compose run --rm datos bun run datos:eliminar  # solo ventas, conserva users
+```
 
-La clave pública `VITE_CLERK_PUBLISHABLE_KEY` se incorpora al cliente durante el build: si cambia, ejecuta de nuevo `docker compose up --build -d`. Las otras variables se pasan al contenedor al arrancar.
+Notas:
+
+- `DATABASE_URL` debe ser accesible desde el contenedor. Si Postgres corre en el host, usa `host.docker.internal` en vez de `localhost`; en otro servidor, su dirección accesible desde Docker. La base debe permitir crear tablas e índices.
+- `VITE_CLERK_PUBLISHABLE_KEY` se incorpora al cliente durante el build: si cambia, repite `docker compose up --build -d`.
+- En producción la imagen ejecuta `node .output/server/index.mjs` (Nitro `node-server`).
+
+## Estructura
+
+```
+src/
+  routes/            # / (login), /espera, /dashboard/* (index, pedidos, productos, vendedores, conciliacion, usuarios)
+  server/            # schema.ts, users.ts (auth + roles + dashboard), sales.ts (consultas)
+  components/        # dashboard-view.tsx, data-table.tsx, sales-columns.tsx, ui/, features/, shared/
+  assets/            # Excel de origen (detalle_pedidos_2026.xlsx, control_ventas_2026.xlsx)
+  hooks/ lib/ types/ # utilidades, formato, tipos
+scripts/             # registrar-datos.ts, eliminar-registros.ts, reiniciar-base.ts
+drizzle/             # migraciones generadas por Drizzle Kit
+```
+
+## Scripts disponibles
+
+| Script | Comando | Descripción |
+|---|---|---|
+| `dev` | `vite dev --host 0.0.0.0 --port 3000` | Servidor de desarrollo |
+| `build` / `preview` | `vite build` / `vite preview` | Build y preview Nitro |
+| `db:generate` | `drizzle-kit generate` | Nueva migración desde `schema.ts` |
+| `db:migrate` | `drizzle-kit migrate` | Aplica migraciones |
+| `db:reset` | `reiniciar-base.ts && db:migrate` | Borra y recrea esquema |
+| `datos:registrar` | `bun scripts/registrar-datos.ts` | Importa ambos Excel |
+| `datos:eliminar` | `bun scripts/eliminar-registros.ts` | Borra datos comerciales |
+| `lint` / `format` / `check` | `biome ...` | Lint y formato |
