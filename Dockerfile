@@ -16,7 +16,5 @@ ENV NODE_ENV=production \
     PORT=3000
 WORKDIR /app
 COPY --from=build /app/.output ./.output
-COPY --from=build /app/src/assets/detalle_pedidos_2026.xlsx ./src/assets/detalle_pedidos_2026.xlsx
-
 EXPOSE 3000
 CMD ["node", ".output/server/index.mjs"]

@@ -1,9 +1,8 @@
 import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as XLSX from "xlsx";
-import { ensureSchema } from "../src/server/ensure-schema";
 import { salesLines } from "../src/server/schema";
 
 type ImportedSale = typeof salesLines.$inferInsert;
@@ -34,7 +33,9 @@ function asDate(value: unknown): string {
 }
 
 async function parseSalesWorkbook(): Promise<ImportedSale[]> {
-	const workbookPath = resolve(import.meta.dir, "../src/assets/detalle_pedidos_2026.xlsx");
+	const workbookPath = fileURLToPath(
+		new URL("../src/assets/detalle_pedidos_2026.xlsx", import.meta.url),
+	);
 	const workbook = XLSX.read(await readFile(workbookPath), {
 		type: "buffer",
 		cellDates: true,
@@ -79,7 +80,6 @@ async function main() {
 	const client = postgres(connectionString, { max: 2, connect_timeout: 10 });
 	try {
 		const db = drizzle(client);
-		await ensureSchema(db);
 		const inserted = await db.transaction(async (tx) => {
 			let total = 0;
 			for (let offset = 0; offset < rows.length; offset += 400) {
@@ -92,7 +92,9 @@ async function main() {
 			}
 			return total;
 		});
-		console.log(`Filas del Excel: ${rows.length}. Registros nuevos: ${inserted}. Ya existentes: ${rows.length - inserted}.`);
+		console.log(
+			`Filas del Excel: ${rows.length}. Registros nuevos: ${inserted}. Ya existentes: ${rows.length - inserted}.`,
+		);
 	} finally {
 		await client.end();
 	}

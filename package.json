@@ -7,6 +7,11 @@
   },
   "scripts": {
     "dev": "vite dev --host 0.0.0.0 --port 3000",
+    "datos:registrar": "bun scripts/registrar-datos.ts",
+    "datos:eliminar": "bun scripts/eliminar-registros.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:reset": "bun scripts/reiniciar-base.ts && bun run db:migrate",
     "generate-routes": "tsr generate",
     "build": "vite build",
     "preview": "vite preview",
@@ -53,6 +58,8 @@
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^6.0.1",
+    "dotenv": "^18.0.3",
+    "drizzle-kit": "^0.31.11",
     "typescript": "^6.0.2",
     "vite": "^8.0.0"
   },

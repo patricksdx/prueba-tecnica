@@ -9,6 +9,8 @@
 		"ignoreUnknown": false,
 		"includes": [
 			"**/src/**/*",
+			"**/scripts/**/*",
+			"**/drizzle.config.ts",
 			"**/.vscode/**/*",
 			"**/index.html",
 			"**/vite.config.ts",
@@ -33,4 +35,3 @@
 		}
 	}
 }
-

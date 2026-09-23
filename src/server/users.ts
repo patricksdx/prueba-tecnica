@@ -1,13 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { asc, count, desc, eq } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/postgres-js";
-import { sql } from "drizzle-orm";
-import postgres from "postgres";
 import { auth, clerkClient } from "@clerk/tanstack-react-start/server";
-import { createServerFn } from "@tanstack/react-start";
 import { redirect } from "@tanstack/react-router";
+import { createServerFn } from "@tanstack/react-start";
+import { asc, count, desc, eq, sql } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
 import { salesLines, users } from "./schema";
-import { ensureSchema } from "./ensure-schema";
 
 export type AppRole = "admin" | "reader";
 
@@ -34,7 +32,6 @@ async function withDatabase<T>(
 	const client = postgres(connectionString, { max: 2, connect_timeout: 10 });
 	try {
 		const db = drizzle(client);
-		await ensureSchema(db);
 		return await work(db);
 	} finally {
 		await client.end();
