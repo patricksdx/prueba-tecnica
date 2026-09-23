@@ -232,7 +232,7 @@ export async function fetchSalesDashboard(): Promise<SalesDashboardDto> {
 
 		const metricRows = (await db.execute(sql`
 			SELECT
-				COALESCE(SUM(CASE WHEN o.status = 'Completada' THEN l.line_total ELSE 0 END), 0)::int AS sales,
+				COALESCE(SUM(CASE WHEN o.status = 'Completada' THEN l.line_total_cents ELSE 0 END), 0)::int AS sales,
 				COALESCE(SUM(CASE WHEN o.status = 'Completada' THEN l.quantity ELSE 0 END), 0)::int AS units,
 				COUNT(DISTINCT CASE WHEN o.status = 'Completada' THEN o.id END)::int AS completed_orders
 			FROM sales_orders o
@@ -240,8 +240,8 @@ export async function fetchSalesDashboard(): Promise<SalesDashboardDto> {
 		`)) as unknown as RawRow[];
 
 		const monthRows = (await db.execute(sql`
-			SELECT SUBSTRING(o.order_date, 1, 7) AS ym,
-				COALESCE(SUM(l.line_total), 0)::int AS sales,
+			SELECT TO_CHAR(o.order_date, 'YYYY-MM') AS ym,
+				COALESCE(SUM(l.line_total_cents), 0)::int AS sales,
 				COALESCE(SUM(l.quantity), 0)::int AS units
 			FROM sales_orders o
 			JOIN sales_order_lines l ON l.order_id = o.id
@@ -261,7 +261,7 @@ export async function fetchSalesDashboard(): Promise<SalesDashboardDto> {
 			SELECT COALESCE(NULLIF(l.sku_normalized, ''), NULLIF(l.sku_raw, ''), '(sin sku)') AS sku,
 				MAX(COALESCE(p.canonical_name, NULLIF(l.description, ''), '(sin nombre)')) AS product,
 				COALESCE(SUM(l.quantity), 0)::int AS quantity,
-				COALESCE(SUM(l.line_total), 0)::int AS sales
+				COALESCE(SUM(l.line_total_cents), 0)::int AS sales
 			FROM sales_order_lines l
 			JOIN sales_orders o ON o.id = l.order_id
 			LEFT JOIN products p ON p.id = l.product_id
@@ -279,7 +279,7 @@ export async function fetchSalesDashboard(): Promise<SalesDashboardDto> {
 
 		const sellerRows = (await db.execute(sql`
 			SELECT COALESCE(s.name, 'Sin vendedor') AS name,
-				COALESCE(SUM(l.line_total), 0)::int AS sales,
+				COALESCE(SUM(l.line_total_cents), 0)::int AS sales,
 				COUNT(DISTINCT o.id)::int AS orders
 			FROM sales_orders o
 			LEFT JOIN sellers s ON s.id = o.seller_id
@@ -307,7 +307,7 @@ export async function fetchSalesDashboard(): Promise<SalesDashboardDto> {
 			FROM sales_orders o
 			LEFT JOIN sellers s ON s.id = o.seller_id
 			LEFT JOIN (
-				SELECT order_id, SUM(line_total) AS total, COUNT(*) AS cnt,
+				SELECT order_id, SUM(line_total_cents) AS total, COUNT(*) AS cnt,
 					MIN(line_no) AS first_line
 				FROM sales_order_lines GROUP BY order_id
 			) ot ON ot.order_id = o.id
@@ -350,7 +350,7 @@ export async function fetchSalesDashboard(): Promise<SalesDashboardDto> {
 			JOIN sales_orders o ON o.id = c.order_id
 			LEFT JOIN sellers s ON s.id = o.seller_id
 			LEFT JOIN (
-				SELECT order_id, SUM(line_total) AS total
+				SELECT order_id, SUM(line_total_cents) AS total
 				FROM sales_order_lines GROUP BY order_id
 			) ot ON ot.order_id = o.id
 			WHERE c.amount_cents IS NOT NULL

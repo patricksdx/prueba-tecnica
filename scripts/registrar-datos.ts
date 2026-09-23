@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as XLSX from "xlsx";
@@ -48,6 +49,8 @@ const MONTHS_ES: Record<string, string> = {
 	diciembre: "12",
 };
 
+const BATCH_SIZE = 500;
+
 type Reject = { source: string; row: number; reason: string };
 
 function asText(value: unknown): string {
@@ -76,7 +79,10 @@ function parseMoneyToCents(
 	else if (s.includes(",") && s.includes(".")) s = s.replace(/,/g, "");
 	else if (s.includes(",") && !s.includes(".")) {
 		const parts = s.split(",");
-		s = parts.length === 2 && parts[1].length <= 2 ? parts.join(".") : parts.join("");
+		s =
+			parts.length === 2 && parts[1].length <= 2
+				? parts.join(".")
+				: parts.join("");
 	}
 	const n = Number(s);
 	if (!Number.isFinite(n)) return { ok: false, cents: null };
@@ -84,7 +90,8 @@ function parseMoneyToCents(
 }
 
 function parseQuantity(value: unknown): { ok: boolean; qty: number } {
-	if (value == null || String(value).trim() === "") return { ok: false, qty: 0 };
+	if (value == null || String(value).trim() === "")
+		return { ok: false, qty: 0 };
 	const n = typeof value === "number" ? value : Number(String(value).trim());
 	if (!Number.isFinite(n) || n < 0) return { ok: false, qty: 0 };
 	return { ok: true, qty: Math.round(n) };
@@ -123,9 +130,25 @@ function normalizeControlStatus(raw: string): string {
 	const s = raw.trim().toLowerCase();
 	if (!s) return "recorded";
 	if (s === "anulado") return "cancelled";
-	if (s === "cancelo" || s === "canceló" || s === "cancelado") return "cancelled";
+	if (s === "cancelo" || s === "canceló" || s === "cancelado")
+		return "cancelled";
 	return "unknown";
 }
+
+// IDs deterministas: la reimportación actualiza en vez de duplicar.
+const sellerIdFor = (
+	code: string | null,
+	name: string | null,
+	control: string | null,
+): { id: string; name: string } | null => {
+	if (code) return { id: `sel-code-${code}`, name: name ?? code };
+	if (name) return { id: `sel-name-${name.toUpperCase()}`, name };
+	if (control) {
+		const known = KNOWN_SELLERS[control];
+		return { id: `sel-ctl-${control}`, name: known?.name ?? control };
+	}
+	return null;
+};
 
 async function main() {
 	const connectionString = process.env.DATABASE_URL;
@@ -138,147 +161,122 @@ async function main() {
 	const client = postgres(connectionString, { max: 2, connect_timeout: 10 });
 	try {
 		const db = drizzle(client);
-		const report = await db.transaction(async (tx) => {
-			const out: string[] = [];
-			// Idempotencia por hash.
-			const existing = await tx
-				.select({ kind: importBatches.sourceKind, sha: importBatches.sha256 })
-				.from(importBatches);
-			const hasDetail = existing.some(
-				(r) => r.kind === "order_detail" && r.sha === detailSha,
-			);
-			const hasControl = existing.some(
-				(r) => r.kind === "sales_control" && r.sha === controlSha,
-			);
+		const existing = await db
+			.select({ kind: importBatches.sourceKind, sha: importBatches.sha256 })
+			.from(importBatches);
+		const hasDetail = existing.some(
+			(r) => r.kind === "order_detail" && r.sha === detailSha,
+		);
+		const hasControl = existing.some(
+			(r) => r.kind === "sales_control" && r.sha === controlSha,
+		);
 
-			// ---------- DETALLE ----------
-			let detailRejected = 0;
-			const detailRejects: Reject[] = [];
-			if (hasDetail) {
-				out.push("Detalle: archivo ya importado (mismo sha), se omite.");
-			} else {
-				const wb = XLSX.read(detailBuf, { type: "buffer", cellDates: true });
-				// Resumen -> reported_summaries (declarado, no canónico).
-				const resumenSheet = wb.Sheets.Resumen;
-				const summaries: typeof reportedSummaries.$inferInsert[] = [];
-				if (resumenSheet) {
-					const rows = XLSX.utils.sheet_to_json<unknown[]>(resumenSheet, {
-						header: 1,
-						defval: "",
-					});
-					for (let i = 1; i < rows.length; i++) {
-						const r = rows[i];
-						const label = asText(r[0]);
-						if (!label) continue;
-						if (/^total$/i.test(label)) {
-							const t = parseMoneyToCents(r[3] ?? r[1], true);
-							summaries.push({
-								id: randomUUID(),
-								kind: "detail_grand_total",
-								period: "2026",
-								reportedTotalCents: t.cents ?? 0,
-								rawLabel: label,
-								sourceSheet: "Resumen",
-								sourceRow: i + 1,
-							});
-							continue;
-						}
-						const count = parseQuantity(r[2]);
-						const total = parseMoneyToCents(r[3], true);
-						summaries.push({
-							id: randomUUID(),
-							kind: "detail_seller",
-							period: "2026",
-							reportedOrders: count.ok ? count.qty : null,
-							reportedTotalCents: total.cents ?? 0,
-							rawLabel: `${label} | ${asText(r[1])}`,
-							sourceSheet: "Resumen",
-							sourceRow: i + 1,
-						});
-					}
+		// ---------- DETALLE ----------
+		if (hasDetail) {
+			console.log("Detalle: archivo ya importado (mismo sha), se omite.");
+		} else {
+			const wb = XLSX.read(detailBuf, { type: "buffer", cellDates: true });
+			const sheet = wb.Sheets.Detalle;
+			if (!sheet) throw new Error("No se encontró la pestaña Detalle.");
+			const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
+				defval: "",
+			});
+			type ParsedLine = {
+				excelRow: number;
+				orderNo: string;
+				normalizedNo: string;
+				orderDate: string;
+				sellerCode: string | null;
+				sellerName: string | null;
+				customerName: string | null;
+				channel: string | null;
+				status: string;
+				payment: string | null;
+				district: string | null;
+				skuRaw: string | null;
+				skuNorm: string | null;
+				description: string;
+				brand: string | null;
+				category: string | null;
+				quantity: number;
+				unitPrice: number | null;
+				lineTotal: number | null;
+			};
+			const parsed: ParsedLine[] = [];
+			const rejects: Reject[] = [];
+			rows.forEach((row, index) => {
+				const excelRow = index + 2;
+				const orderNo = asText(row.pedido);
+				if (!orderNo) {
+					rejects.push({ source: "Detalle", row: excelRow, reason: "pedido vacío" });
+					return;
 				}
-
-				const sheet = wb.Sheets.Detalle;
-				if (!sheet) throw new Error("No se encontró la pestaña Detalle.");
-				const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
-					defval: "",
-				});
-				type ParsedLine = {
-					excelRow: number;
-					orderNo: string;
-					normalizedNo: string;
-					orderDate: string;
-					sellerCode: string | null;
-					sellerName: string | null;
-					customerName: string | null;
-					channel: string | null;
-					status: string;
-					skuRaw: string | null;
-					skuNorm: string | null;
-					description: string;
-					brand: string | null;
-					category: string | null;
-					quantity: number;
-					unitPrice: number | null;
-					lineTotal: number | null;
-				};
-				const parsed: ParsedLine[] = [];
-				rows.forEach((row, index) => {
-					const excelRow = index + 2;
-					const orderNo = asText(row.pedido);
-					if (!orderNo) {
-						detailRejected++;
-						detailRejects.push({ source: "Detalle", row: excelRow, reason: "pedido vacío" });
-						return;
-					}
-					const orderDate = parseDateOnly(row.fecha);
-					if (!orderDate) {
-						detailRejected++;
-						detailRejects.push({ source: "Detalle", row: excelRow, reason: `fecha inválida: ${asText(row.fecha)}` });
-						return;
-					}
-					const qty = parseQuantity(row.cantidad);
-					if (!qty.ok) {
-						detailRejected++;
-						detailRejects.push({ source: "Detalle", row: excelRow, reason: `cantidad inválida: ${asText(row.cantidad)}` });
-						return;
-					}
-					const unit = parseMoneyToCents(row.precio_unit, true);
-					if (!unit.ok) {
-						detailRejected++;
-						detailRejects.push({ source: "Detalle", row: excelRow, reason: `precio_unit inválido: ${asText(row.precio_unit)}` });
-						return;
-					}
-					const tot = parseMoneyToCents(row.total_pen, true);
-					if (!tot.ok) {
-						detailRejected++;
-						detailRejects.push({ source: "Detalle", row: excelRow, reason: `total inválido: ${asText(row.total_pen)}` });
-						return;
-					}
-					const skuRaw = asText(row.sku);
-					const skuNorm = skuRaw ? normalizeSku(skuRaw) : "";
-					parsed.push({
-						excelRow,
-						orderNo,
-						normalizedNo: normalizeOrderNo(orderNo),
-						orderDate,
-						sellerCode: asText(row.codigo) || null,
-						sellerName: asText(row.vendedor) || null,
-						customerName: asText(row.cliente) || null,
-						channel: asText(row.canal) || null,
-						status: asText(row.estado),
-						skuRaw: skuRaw || null,
-						skuNorm: skuNorm || null,
-						description: asText(row.producto),
-						brand: asText(row.marca) || null,
-						category: asText(row.categoria) || null,
-						quantity: qty.qty,
-						unitPrice: unit.cents,
-						lineTotal: tot.cents,
+				const orderDate = parseDateOnly(row.fecha);
+				if (!orderDate) {
+					rejects.push({
+						source: "Detalle",
+						row: excelRow,
+						reason: `fecha inválida: ${asText(row.fecha)}`,
 					});
+					return;
+				}
+				const qty = parseQuantity(row.cantidad);
+				if (!qty.ok) {
+					rejects.push({
+						source: "Detalle",
+						row: excelRow,
+						reason: `cantidad inválida: ${asText(row.cantidad)}`,
+					});
+					return;
+				}
+				const unit = parseMoneyToCents(row.precio_unit, true);
+				if (!unit.ok) {
+					rejects.push({
+						source: "Detalle",
+						row: excelRow,
+						reason: `precio_unit inválido: ${asText(row.precio_unit)}`,
+					});
+					return;
+				}
+				const tot = parseMoneyToCents(row.total_pen, true);
+				if (!tot.ok) {
+					rejects.push({
+						source: "Detalle",
+						row: excelRow,
+						reason: `total inválido: ${asText(row.total_pen)}`,
+					});
+					return;
+				}
+				const skuRaw = asText(row.sku);
+				const skuNorm = skuRaw ? normalizeSku(skuRaw) : "";
+				parsed.push({
+					excelRow,
+					orderNo,
+					normalizedNo: normalizeOrderNo(orderNo),
+					orderDate,
+					sellerCode: asText(row.codigo) || null,
+					sellerName: asText(row.vendedor) || null,
+					customerName: asText(row.cliente) || null,
+					channel: asText(row.canal) || null,
+					status: asText(row.estado),
+					payment: asText(row.medio_pago) || null,
+					district: asText(row.distrito) || null,
+					skuRaw: skuRaw || null,
+					skuNorm: skuNorm || null,
+					description: asText(row.producto),
+					brand: asText(row.marca) || null,
+					category: asText(row.categoria) || null,
+					quantity: qty.qty,
+					unitPrice: unit.cents,
+					lineTotal: tot.cents,
 				});
+			});
+			console.log(
+				`Detalle: parseadas ${parsed.length}, rechazadas ${rejects.length}.`,
+			);
 
-				const batchId = randomUUID();
+			const batchId = randomUUID();
+			await db.transaction(async (tx) => {
 				await tx.insert(importBatches).values({
 					id: batchId,
 					sourceKind: "order_detail",
@@ -286,181 +284,232 @@ async function main() {
 					sha256: detailSha,
 					rowsRead: rows.length,
 					rowsImported: parsed.length,
-					rowsRejected: detailRejected,
+					rowsRejected: rejects.length,
 				});
 
-				// Sellers: conocidos + códigos/nombres del detalle.
-				const sellerByCode = new Map<string, { id: string }>();
-				const sellerByName = new Map<string, { id: string }>();
-				const existingSellers = await tx.select().from(sellers);
-				for (const s of existingSellers) {
-					if (s.externalCode) sellerByCode.set(s.externalCode, s);
-					if (s.name) sellerByName.set(s.name.toUpperCase(), s);
+				// Sellers (conocidos + detalle).
+				const sellerRows = new Map<
+					string,
+					{ id: string; externalCode: string | null; controlName: string | null; name: string }
+				>();
+				for (const [control, info] of Object.entries(KNOWN_SELLERS)) {
+					sellerRows.set(`sel-code-${info.code}`, {
+						id: `sel-code-${info.code}`,
+						externalCode: info.code,
+						controlName: control,
+						name: info.name,
+					});
 				}
-				const ensureSeller = async (code: string | null, name: string | null, control: string | null) => {
-					if (code) {
-						const hit = sellerByCode.get(code);
-						if (hit) return hit;
-					}
-					if (!code && name) {
-						const hit = sellerByName.get(name.toUpperCase());
-						if (hit) return hit;
-					}
-					if (!code && !name && !control) return null;
-					const id = randomUUID();
+				for (const p of parsed) {
+					const s = sellerIdFor(p.sellerCode, p.sellerName, null);
+					if (!s || sellerRows.has(s.id)) continue;
+					sellerRows.set(s.id, {
+						id: s.id,
+						externalCode: p.sellerCode,
+						controlName: null,
+						name: s.name,
+					});
+				}
+				const sellerList = [...sellerRows.values()];
+				for (let o = 0; o < sellerList.length; o += BATCH_SIZE) {
 					await tx
 						.insert(sellers)
-						.values({ id, externalCode: code, controlName: control, name: name ?? control ?? code ?? "Desconocido" })
+						.values(sellerList.slice(o, o + BATCH_SIZE))
 						.onConflictDoNothing();
-					const rec = { id };
-					if (code) sellerByCode.set(code, rec);
-					if (name) sellerByName.set(name.toUpperCase(), rec);
-					return rec;
-				};
-				for (const [control, info] of Object.entries(KNOWN_SELLERS))
-					await ensureSeller(info.code, info.name, control);
-				for (const p of parsed) await ensureSeller(p.sellerCode, p.sellerName, null);
-
-				// Customers por nombre (detalle no trae DNI).
-				const customerByName = new Map<string, string>();
-				const existingCustomers = await tx.select().from(customers);
-				for (const c of existingCustomers) {
-					if (c.name) customerByName.set(c.name.toUpperCase(), c.id);
 				}
-				const ensureCustomerByName = async (name: string | null) => {
-					if (!name) return null;
-					const key = name.toUpperCase();
-					const hit = customerByName.get(key);
-					if (hit) return hit;
-					const id = randomUUID();
-					await tx.insert(customers).values({ id, name }).onConflictDoNothing();
-					customerByName.set(key, id);
-					return id;
-				};
-				for (const p of parsed) await ensureCustomerByName(p.customerName);
+				console.log(`Detalle: vendedores ${sellerList.length}.`);
+
+				// Customers por nombre.
+				const customerRows = new Map<string, { id: string; name: string }>();
+				for (const p of parsed) {
+					if (!p.customerName) continue;
+					const id = `cus-n-${p.customerName.toUpperCase()}`;
+					if (!customerRows.has(id))
+						customerRows.set(id, { id, name: p.customerName });
+				}
+				const customerList = [...customerRows.values()];
+				for (let o = 0; o < customerList.length; o += BATCH_SIZE) {
+					await tx
+						.insert(customers)
+						.values(customerList.slice(o, o + BATCH_SIZE))
+						.onConflictDoNothing();
+				}
+				console.log(`Detalle: clientes ${customerList.length}.`);
 
 				// Products por SKU normalizado.
-				const productBySku = new Map<string, string>();
-				const existingProducts = await tx.select().from(products);
-				for (const p of existingProducts) productBySku.set(p.sku, p.id);
+				const productRows = new Map<
+					string,
+					{ id: string; sku: string; canonicalName: string | null; brand: string | null; category: string | null }
+				>();
 				for (const p of parsed) {
-					if (!p.skuNorm || productBySku.has(p.skuNorm)) continue;
-					const id = randomUUID();
+					if (!p.skuNorm || productRows.has(`prd-${p.skuNorm}`)) continue;
+					productRows.set(`prd-${p.skuNorm}`, {
+						id: `prd-${p.skuNorm}`,
+						sku: p.skuNorm,
+						canonicalName: p.description || null,
+						brand: p.brand,
+						category: p.category,
+					});
+				}
+				const productList = [...productRows.values()];
+				for (let o = 0; o < productList.length; o += BATCH_SIZE) {
 					await tx
 						.insert(products)
-						.values({ id, sku: p.skuNorm, canonicalName: p.description || null, brand: p.brand, category: p.category })
+						.values(productList.slice(o, o + BATCH_SIZE))
 						.onConflictDoNothing();
-					productBySku.set(p.skuNorm, id);
 				}
+				console.log(`Detalle: productos ${productList.length}.`);
 
-				// Orders: upsert por external_no. line_no secuencial por pedido.
+				// Orders + lines: line_no secuencial por pedido.
 				const lineCounter = new Map<string, number>();
-				const orderCache = new Map<string, { id: string; sellerId: string | null; customerId: string | null }>();
+				const orderValues = new Map<string, typeof salesOrders.$inferInsert>();
+				const lineValues: typeof salesOrderLines.$inferInsert[] = [];
 				for (const p of parsed) {
-					let cached = orderCache.get(p.orderNo);
-					if (!cached) {
-						const sellerRec = p.sellerCode
-							? sellerByCode.get(p.sellerCode) ?? null
-							: p.sellerName
-								? (sellerByName.get(p.sellerName.toUpperCase()) ?? null)
-								: null;
-						const customerId = p.customerName
-							? (customerByName.get(p.customerName.toUpperCase()) ?? null)
-							: null;
-						const id = `ord-${p.orderNo}`;
-						await tx
-							.insert(salesOrders)
-							.values({
-								id,
-								externalNo: p.orderNo,
-								normalizedNo: p.normalizedNo,
-								orderDate: p.orderDate,
-								sellerId: sellerRec?.id ?? null,
-								customerId,
-								customerName: p.customerName,
-								channel: p.channel,
-								status: p.status,
-								payment: asText((rows[p.excelRow - 2] as Record<string, unknown>).medio_pago) || null,
-								district: asText((rows[p.excelRow - 2] as Record<string, unknown>).distrito) || null,
-								batchId,
-								sourceSheet: "Detalle",
-								sourceRow: p.excelRow,
-							})
-							.onConflictDoUpdate({
-								target: salesOrders.externalNo,
-								set: {
-									orderDate: p.orderDate,
-									sellerId: sellerRec?.id ?? null,
-									customerId,
-									customerName: p.customerName,
-									channel: p.channel,
-									status: p.status,
-									batchId,
-									sourceRow: p.excelRow,
-								},
-							});
-						cached = { id, sellerId: sellerRec?.id ?? null, customerId };
-						orderCache.set(p.orderNo, cached);
+					if (!orderValues.has(p.orderNo)) {
+						const s = sellerIdFor(p.sellerCode, p.sellerName, null);
+						orderValues.set(p.orderNo, {
+							id: `ord-${p.orderNo}`,
+							externalNo: p.orderNo,
+							normalizedNo: p.normalizedNo,
+							orderDate: p.orderDate,
+							sellerId: s?.id ?? null,
+							customerId: p.customerName
+								? `cus-n-${p.customerName.toUpperCase()}`
+								: null,
+							customerName: p.customerName,
+							channel: p.channel,
+							status: p.status,
+							payment: p.payment,
+							district: p.district,
+							batchId,
+							sourceSheet: "Detalle",
+							sourceRow: p.excelRow,
+						});
 					}
 					const n = (lineCounter.get(p.orderNo) ?? 0) + 1;
 					lineCounter.set(p.orderNo, n);
+					lineValues.push({
+						id: `ord-${p.orderNo}:L${n}`,
+						orderId: `ord-${p.orderNo}`,
+						lineNo: n,
+						productId: p.skuNorm ? `prd-${p.skuNorm}` : null,
+						skuRaw: p.skuRaw,
+						skuNormalized: p.skuNorm,
+						description: p.description,
+						brandSnapshot: p.brand,
+						categorySnapshot: p.category,
+						quantity: p.quantity,
+						unitPrice: p.unitPrice,
+						lineTotal: p.lineTotal,
+						sourceRow: p.excelRow,
+					});
+				}
+				const orderList = [...orderValues.values()];
+				for (let o = 0; o < orderList.length; o += BATCH_SIZE) {
+					await tx
+						.insert(salesOrders)
+						.values(orderList.slice(o, o + BATCH_SIZE))
+						.onConflictDoUpdate({
+							target: salesOrders.externalNo,
+							set: {
+								orderDate: sql`excluded.order_date`,
+								sellerId: sql`excluded.seller_id`,
+								customerId: sql`excluded.customer_id`,
+								customerName: sql`excluded.customer_name`,
+								channel: sql`excluded.channel`,
+								status: sql`excluded.status`,
+								payment: sql`excluded.payment`,
+								district: sql`excluded.district`,
+								batchId: sql`excluded.batch_id`,
+								sourceRow: sql`excluded.source_row`,
+							},
+						});
+					if (o % 2000 === 0)
+						console.log(`Detalle: pedidos ${Math.min(o + BATCH_SIZE, orderList.length)}/${orderList.length}.`);
+				}
+				for (let o = 0; o < lineValues.length; o += BATCH_SIZE) {
 					await tx
 						.insert(salesOrderLines)
-						.values({
-							id: `${cached.id}:L${n}`,
-							orderId: cached.id,
-							lineNo: n,
-							productId: p.skuNorm ? (productBySku.get(p.skuNorm) ?? null) : null,
-							skuRaw: p.skuRaw,
-							skuNormalized: p.skuNorm,
-							description: p.description,
-							brandSnapshot: p.brand,
-							categorySnapshot: p.category,
-							quantity: p.quantity,
-							unitPrice: p.unitPrice,
-							lineTotal: p.lineTotal,
-							sourceRow: p.excelRow,
-						})
+						.values(lineValues.slice(o, o + BATCH_SIZE))
 						.onConflictDoUpdate({
 							target: [salesOrderLines.orderId, salesOrderLines.lineNo],
 							set: {
-								productId: p.skuNorm ? (productBySku.get(p.skuNorm) ?? null) : null,
-								skuRaw: p.skuRaw,
-								skuNormalized: p.skuNorm,
-								description: p.description,
-								brandSnapshot: p.brand,
-								categorySnapshot: p.category,
-								quantity: p.quantity,
-								unitPrice: p.unitPrice,
-								lineTotal: p.lineTotal,
-							sourceRow: p.excelRow,
-						},
-					});
+								productId: sql`excluded.product_id`,
+								skuRaw: sql`excluded.sku_raw`,
+								skuNormalized: sql`excluded.sku_normalized`,
+								description: sql`excluded.description`,
+								brandSnapshot: sql`excluded.brand_snapshot`,
+								categorySnapshot: sql`excluded.category_snapshot`,
+								quantity: sql`excluded.quantity`,
+								unitPrice: sql`excluded.unit_price_cents`,
+								lineTotal: sql`excluded.line_total_cents`,
+								sourceRow: sql`excluded.source_row`,
+							},
+						});
+					if (o % 2000 === 0)
+						console.log(`Detalle: líneas ${Math.min(o + BATCH_SIZE, lineValues.length)}/${lineValues.length}.`);
 				}
-				if (summaries.length) {
-					for (let o = 0; o < summaries.length; o += 400) {
-						await tx.insert(reportedSummaries).values(
-							summaries.slice(o, o + 400).map((s) => ({ ...s, batchId })),
-						);
-					}
-				}
-				out.push(
-					`Detalle: leídas ${rows.length}, importadas ${parsed.length}, rechazadas ${detailRejected}.`,
+
+				// Resumen declarado -> reported_summaries (reemplaza versión anterior).
+				await tx.delete(reportedSummaries).where(
+					sql`${reportedSummaries.kind} IN ('detail_seller', 'detail_grand_total')`,
 				);
-				for (const r of detailRejects.slice(0, 20))
-					out.push(`  Rechazada Detalle fila ${r.row}: ${r.reason}`);
-			}
+				const resumenSheet = wb.Sheets.Resumen;
+				if (resumenSheet) {
+					const grid = XLSX.utils.sheet_to_json<unknown[]>(resumenSheet, {
+						header: 1,
+						defval: "",
+					});
+					const toInsert: typeof reportedSummaries.$inferInsert[] = [];
+					for (let i = 1; i < grid.length; i++) {
+						const r = grid[i];
+						const label = asText(r[0]);
+						if (!label) continue;
+						if (/^total$/i.test(label)) {
+							const t = parseMoneyToCents(r[3] ?? r[1], true);
+							toInsert.push({
+								id: randomUUID(),
+								kind: "detail_grand_total",
+								period: "2026",
+								reportedTotalCents: t.cents ?? 0,
+								rawLabel: label,
+								batchId,
+								sourceSheet: "Resumen",
+								sourceRow: i + 1,
+							});
+							continue;
+						}
+						const cnt = parseQuantity(r[2]);
+						const tot = parseMoneyToCents(r[3], true);
+						toInsert.push({
+							id: randomUUID(),
+							kind: "detail_seller",
+							period: "2026",
+							reportedOrders: cnt.ok ? cnt.qty : null,
+							reportedTotalCents: tot.cents ?? 0,
+							rawLabel: `${label} | ${asText(r[1])}`,
+							batchId,
+							sourceSheet: "Resumen",
+							sourceRow: i + 1,
+						});
+					}
+					if (toInsert.length) await tx.insert(reportedSummaries).values(toInsert);
+				}
+			});
+			console.log(
+				`Detalle OK: pedidos ${new Set(parsed.map((p) => p.orderNo)).size}, líneas ${parsed.length}.`,
+			);
+			for (const r of rejects.slice(0, 20))
+				console.log(`  Rechazada Detalle fila ${r.row}: ${r.reason}`);
+		}
 
-			// ---------- CONTROL ----------
-			if (hasControl) {
-				out.push("Control: archivo ya importado (mismo sha), se omite.");
-			} else {
-				const wb = XLSX.read(controlBuf, { type: "buffer", cellDates: true });
-				const batchId = randomUUID();
-				const controlRejects: Reject[] = [];
-				let controlImported = 0;
-				let controlRead = 0;
-
+		// ---------- CONTROL ----------
+		if (hasControl) {
+			console.log("Control: archivo ya importado (mismo sha), se omite.");
+		} else {
+			const wb = XLSX.read(controlBuf, { type: "buffer", cellDates: true });
+			const batchId = randomUUID();
+			await db.transaction(async (tx) => {
 				await tx.insert(importBatches).values({
 					id: batchId,
 					sourceKind: "sales_control",
@@ -471,53 +520,39 @@ async function main() {
 					rowsRejected: 0,
 				});
 
-				// Refresca mapas de vendedores/clientes.
-				const sellerRows = await tx.select().from(sellers);
-				const sellerByControl = new Map<string, string>();
-				for (const s of sellerRows) if (s.controlName) sellerByControl.set(s.controlName, s.id);
+				// Vendedores conocidos (mismo id determinista que en detalle).
 				for (const [control, info] of Object.entries(KNOWN_SELLERS)) {
-					if (!sellerByControl.has(control)) {
-						const id = randomUUID();
-						await tx.insert(sellers).values({ id, externalCode: info.code, controlName: control, name: info.name }).onConflictDoNothing();
-						sellerByControl.set(control, id);
-					}
+					await tx
+						.insert(sellers)
+						.values({
+							id: `sel-code-${info.code}`,
+							externalCode: info.code,
+							controlName: control,
+							name: info.name,
+						})
+						.onConflictDoUpdate({
+							target: sellers.externalCode,
+							set: { controlName: sql`excluded.control_name`, name: sql`excluded.name` },
+						});
 				}
-				const customerRows = await tx.select().from(customers);
-				const customerByDoc = new Map<string, string>();
-				for (const c of customerRows) if (c.documentNo) customerByDoc.set(c.documentNo, c.id);
-				const ensureCustomerByDoc = async (doc: string | null, name: string | null) => {
-					if (!doc) return null;
-					const hit = customerByDoc.get(doc);
-					if (hit) return hit;
-					const id = randomUUID();
-					await tx.insert(customers).values({ id, documentNo: doc, name }).onConflictDoNothing();
-					customerByDoc.set(doc, id);
-					return id;
-				};
+				const sellerIdByControl = new Map<string, string>(
+					Object.entries(KNOWN_SELLERS).map(([c, i]) => [c, `sel-code-${i.code}`]),
+				);
 
-				type ControlRow = {
-					id: string;
-					entryDate: string;
-					sellerId: string | null;
-					documentRaw: string | null;
-					customerId: string | null;
-					externalRaw: string | null;
-					normalizedNo: string | null;
-					amountCents: number | null;
-					rawStatus: string | null;
-					normalizedStatus: string;
-					batchId: string;
-					sourceSheet: string;
-					sourceRow: number;
-					sourceBlock: string;
-				};
-				const entries: ControlRow[] = [];
+				type Entry = typeof salesControlEntries.$inferInsert;
+				const entries: Entry[] = [];
+				const rejects: Reject[] = [];
+				let controlRead = 0;
+				const customerDocs = new Map<string, { id: string; documentNo: string }>();
 				const monthSheets = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO"];
 				const BASES = [0, 5, 10, 15, 20, 25];
 				for (const sheetName of monthSheets) {
 					const sh = wb.Sheets[sheetName];
 					if (!sh) continue;
-					const grid = XLSX.utils.sheet_to_json<unknown[]>(sh, { header: 1, defval: "" });
+					const grid = XLSX.utils.sheet_to_json<unknown[]>(sh, {
+						header: 1,
+						defval: "",
+					});
 					const headerNames = (grid[0] ?? []).map((v) => asText(v).toUpperCase());
 					for (const base of BASES) {
 						const block = asText(headerNames[base + 1]);
@@ -530,33 +565,43 @@ async function main() {
 							const amtRaw = r[base + 2];
 							const ordRaw = asText(r[base + 3]);
 							const obs = asText(r[base + 4]);
-							const emptyRow =
+							if (
 								(dCell == null || String(dCell).trim() === "") &&
-								!dni && (amtRaw == null || String(amtRaw).trim() === "") && !ordRaw && !obs;
-							if (emptyRow) continue;
+								!dni &&
+								(amtRaw == null || String(amtRaw).trim() === "") &&
+								!ordRaw &&
+								!obs
+							)
+								continue;
 							controlRead++;
 							const excelRow = i + 1;
 							const parsedDate = parseDateOnly(dCell);
 							if (parsedDate) carry = parsedDate;
 							const entryDate = parsedDate ?? carry;
 							if (!entryDate) {
-								controlRejects.push({ source: `${sheetName}/${block}`, row: excelRow, reason: "fecha ausente" });
+								rejects.push({ source: `${sheetName}/${block}`, row: excelRow, reason: "fecha ausente" });
 								continue;
 							}
-							const amt = amtRaw == null || String(amtRaw).trim() === ""
-								? { ok: true, cents: null as number | null }
-								: parseMoneyToCents(amtRaw, true);
+							const amt =
+								amtRaw == null || String(amtRaw).trim() === ""
+									? { ok: true, cents: null as number | null }
+									: parseMoneyToCents(amtRaw, true);
 							if (!amt.ok) {
-								controlRejects.push({ source: `${sheetName}/${block}`, row: excelRow, reason: `importe inválido: ${asText(amtRaw)}` });
+								rejects.push({
+									source: `${sheetName}/${block}`,
+									row: excelRow,
+									reason: `importe inválido: ${asText(amtRaw)}`,
+								});
 								continue;
 							}
-							const customerId = await ensureCustomerByDoc(dni || null, null);
+							if (dni && !customerDocs.has(dni))
+								customerDocs.set(dni, { id: `cus-d-${dni}`, documentNo: dni });
 							entries.push({
 								id: `ctl-${sheetName}-${block}-${excelRow}`,
 								entryDate,
-								sellerId: sellerByControl.get(block) ?? null,
+								sellerId: sellerIdByControl.get(block) ?? null,
 								documentRaw: dni || null,
-								customerId,
+								customerId: dni ? `cus-d-${dni}` : null,
 								externalRaw: ordRaw || null,
 								normalizedNo: ordRaw ? normalizeOrderNo(ordRaw) : null,
 								amountCents: amt.cents,
@@ -567,27 +612,49 @@ async function main() {
 								sourceRow: excelRow,
 								sourceBlock: block,
 							});
-							controlImported++;
 						}
 					}
 				}
-				// Concilia order_id por número normalizado.
+				console.log(`Control: entradas parseadas ${entries.length} (leídas ${controlRead}).`);
+
+				const docList = [...customerDocs.values()];
+				for (let o = 0; o < docList.length; o += BATCH_SIZE) {
+					await tx
+						.insert(customers)
+						.values(docList.slice(o, o + BATCH_SIZE).map((d) => ({ id: d.id, documentNo: d.documentNo })))
+						.onConflictDoNothing();
+				}
+
+				// Concilia order_id por número normalizado (una sola consulta).
 				const orderMap = new Map<string, string>();
-				const allOrders = await tx.select({ id: salesOrders.id, norm: salesOrders.normalizedNo }).from(salesOrders);
+				const allOrders = await tx
+					.select({ id: salesOrders.id, norm: salesOrders.normalizedNo })
+					.from(salesOrders);
 				for (const o of allOrders) if (!orderMap.has(o.norm)) orderMap.set(o.norm, o.id);
-				for (let o = 0; o < entries.length; o += 400) {
+
+				// Reemplaza la versión anterior del control (IDs estables).
+				await tx.delete(salesControlEntries);
+				for (let o = 0; o < entries.length; o += BATCH_SIZE) {
 					await tx.insert(salesControlEntries).values(
-						entries.slice(o, o + 400).map((e) => ({
+						entries.slice(o, o + BATCH_SIZE).map((e) => ({
 							...e,
 							orderId: e.normalizedNo ? (orderMap.get(e.normalizedNo) ?? null) : null,
 						})),
-					).onConflictDoNothing();
+					);
+					if (o % 2000 === 0)
+						console.log(`Control: insertadas ${Math.min(o + BATCH_SIZE, entries.length)}/${entries.length}.`);
 				}
 
-				// Totales declarados.
+				// Totales declarados (reemplaza versión anterior).
+				await tx.delete(reportedSummaries).where(
+					sql`${reportedSummaries.kind} = 'control_monthly'`,
+				);
 				const totSheet = wb.Sheets.Totales;
 				if (totSheet) {
-					const grid = XLSX.utils.sheet_to_json<unknown[]>(totSheet, { header: 1, defval: "" });
+					const grid = XLSX.utils.sheet_to_json<unknown[]>(totSheet, {
+						header: 1,
+						defval: "",
+					});
 					const toInsert: typeof reportedSummaries.$inferInsert[] = [];
 					grid.forEach((r, i) => {
 						const label = asText(r[0]);
@@ -599,7 +666,7 @@ async function main() {
 						toInsert.push({
 							id: randomUUID(),
 							kind: "control_monthly",
-							sellerId: control ? (sellerByControl.get(control) ?? null) : null,
+							sellerId: control ? (sellerIdByControl.get(control) ?? null) : null,
 							period: month && MONTHS_ES[month] ? `2026-${MONTHS_ES[month]}` : null,
 							reportedTotalCents: val.cents ?? 0,
 							rawLabel: label,
@@ -608,15 +675,18 @@ async function main() {
 							sourceRow: i + 1,
 						});
 					});
-					for (let o = 0; o < toInsert.length; o += 400)
-						await tx.insert(reportedSummaries).values(toInsert.slice(o, o + 400));
+					if (toInsert.length) await tx.insert(reportedSummaries).values(toInsert);
 				}
 
-				// Adelantos (filas anónimas se conservan tal cual, sin fill-down).
+				// Adelantos (filas anónimas tal cual, sin fill-down; reemplaza anterior).
+				await tx.delete(customerAdvances);
 				const advSheet = wb.Sheets.Adelanto;
 				let advImported = 0;
 				if (advSheet) {
-					const grid = XLSX.utils.sheet_to_json<unknown[]>(advSheet, { header: 1, defval: "" });
+					const grid = XLSX.utils.sheet_to_json<unknown[]>(advSheet, {
+						header: 1,
+						defval: "",
+					});
 					const toInsert: typeof customerAdvances.$inferInsert[] = [];
 					for (let i = 1; i < grid.length; i++) {
 						const r = grid[i];
@@ -625,17 +695,29 @@ async function main() {
 						const adv = r[2];
 						const falta = r[3];
 						const obs = asText(r[4]);
-						if (!dni && !cli && (adv == null || String(adv).trim() === "") && (falta == null || String(falta).trim() === "") && !obs) continue;
+						if (
+							!dni && !cli &&
+							(adv == null || String(adv).trim() === "") &&
+							(falta == null || String(falta).trim() === "") &&
+							!obs
+						)
+							continue;
 						const a = parseMoneyToCents(adv, true);
 						const f = parseMoneyToCents(falta, true);
 						if (!a.ok || !f.ok) {
-							controlRejects.push({ source: "Adelanto", row: i + 1, reason: "adelanto/falta inválido" });
+							rejects.push({ source: "Adelanto", row: i + 1, reason: "adelanto/falta inválido" });
 							continue;
 						}
-						const customerId = await ensureCustomerByDoc(dni || null, cli || null);
+						if (dni && !customerDocs.has(dni)) {
+							customerDocs.set(dni, { id: `cus-d-${dni}`, documentNo: dni });
+							await tx
+								.insert(customers)
+								.values({ id: `cus-d-${dni}`, documentNo: dni, name: cli || null })
+								.onConflictDoNothing();
+						}
 						toInsert.push({
 							id: randomUUID(),
-							customerId,
+							customerId: dni ? `cus-d-${dni}` : null,
 							documentRaw: dni || null,
 							customerRaw: cli || null,
 							advanceCents: a.cents ?? 0,
@@ -646,16 +728,13 @@ async function main() {
 						});
 						advImported++;
 					}
-					for (let o = 0; o < toInsert.length; o += 400)
-						await tx.insert(customerAdvances).values(toInsert.slice(o, o + 400));
+					if (toInsert.length) await tx.insert(customerAdvances).values(toInsert);
 				}
-				out.push(`Control: leídas ${controlRead}, entradas ${controlImported}, adelantos ${advImported}, rechazadas ${controlRejects.length}.`);
-				for (const r of controlRejects.slice(0, 20))
-					out.push(`  Rechazada ${r.source} fila ${r.row}: ${r.reason}`);
-			}
-			return out;
-		});
-		for (const line of report) console.log(line);
+				console.log(`Control OK: entradas ${entries.length}, adelantos ${advImported}, rechazadas ${rejects.length}.`);
+				for (const r of rejects.slice(0, 20))
+					console.log(`  Rechazada ${r.source} fila ${r.row}: ${r.reason}`);
+			});
+		}
 	} finally {
 		await client.end();
 	}
