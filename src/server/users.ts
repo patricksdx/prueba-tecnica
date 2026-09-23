@@ -1,18 +1,15 @@
 import { randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
 import { asc, count, desc, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { sql } from "drizzle-orm";
 import postgres from "postgres";
-import * as XLSX from "xlsx";
 import { auth, clerkClient } from "@clerk/tanstack-react-start/server";
 import { createServerFn } from "@tanstack/react-start";
 import { redirect } from "@tanstack/react-router";
 import { salesLines, users } from "./schema";
+import { ensureSchema } from "./ensure-schema";
 
 export type AppRole = "admin" | "reader";
-type ImportedSale = typeof salesLines.$inferInsert;
 
 const monthNames = [
 	"Enero",
@@ -38,132 +35,9 @@ async function withDatabase<T>(
 	try {
 		const db = drizzle(client);
 		await ensureSchema(db);
-		await importSalesWhenEmpty(db);
 		return await work(db);
 	} finally {
 		await client.end();
-	}
-}
-
-async function ensureSchema(db: ReturnType<typeof drizzle>) {
-	await db.execute(sql`
-		CREATE TABLE IF NOT EXISTS users (
-			id text PRIMARY KEY,
-			clerk_id text NOT NULL UNIQUE,
-			email text NOT NULL,
-			name text NOT NULL DEFAULT '',
-			role text CHECK (role IS NULL OR role IN ('admin', 'reader')),
-			created_at timestamptz NOT NULL DEFAULT now(),
-			updated_at timestamptz NOT NULL DEFAULT now()
-		)
-	`);
-	await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS role text`);
-	await db.execute(sql`
-		CREATE TABLE IF NOT EXISTS sales_lines (
-			id text PRIMARY KEY,
-			order_no text NOT NULL,
-			order_date date NOT NULL,
-			seller text NOT NULL DEFAULT 'Sin vendedor',
-			seller_code text NOT NULL DEFAULT '',
-			customer text NOT NULL DEFAULT '',
-			channel text NOT NULL DEFAULT '',
-			status text NOT NULL DEFAULT '',
-			sku text NOT NULL DEFAULT '',
-			product text NOT NULL DEFAULT '',
-			brand text NOT NULL DEFAULT '',
-			category text NOT NULL DEFAULT '',
-			quantity integer NOT NULL DEFAULT 0,
-			unit_price_cents integer NOT NULL DEFAULT 0,
-			total_cents integer NOT NULL DEFAULT 0,
-			payment text NOT NULL DEFAULT '',
-			district text NOT NULL DEFAULT ''
-		)
-	`);
-	await db.execute(
-		sql`CREATE INDEX IF NOT EXISTS sales_lines_order_idx ON sales_lines(order_no)`,
-	);
-	await db.execute(
-		sql`CREATE INDEX IF NOT EXISTS sales_lines_status_date_idx ON sales_lines(status, order_date)`,
-	);
-}
-
-function asText(value: unknown): string {
-	return value == null ? "" : String(value).trim();
-}
-
-function asNumber(value: unknown): number {
-	const parsed =
-		typeof value === "number"
-			? value
-			: Number(String(value ?? "").replace(/,/g, ""));
-	return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function asDate(value: unknown): string {
-	if (value instanceof Date && !Number.isNaN(value.valueOf()))
-		return value.toISOString().slice(0, 10);
-	if (typeof value === "number")
-		return new Date(Date.UTC(1899, 11, 30) + value * 86_400_000)
-			.toISOString()
-			.slice(0, 10);
-	const parsed = new Date(String(value));
-	return Number.isNaN(parsed.valueOf())
-		? "2026-01-01"
-		: parsed.toISOString().slice(0, 10);
-}
-
-async function parseSalesWorkbook(): Promise<ImportedSale[]> {
-	// The source workbook stays on the server; never expose it through Vite's public assets.
-	const workbookPath = resolve(
-		process.cwd(),
-		"src/assets/detalle_pedidos_2026.xlsx",
-	);
-	const workbook = XLSX.read(await readFile(workbookPath), {
-		type: "buffer",
-		cellDates: true,
-	});
-	const sheet = workbook.Sheets.Detalle;
-	if (!sheet)
-		throw new Error("No se encontró la pestaña Detalle del Excel de pedidos.");
-	const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
-		defval: "",
-	});
-	return rows.flatMap((row, index) => {
-		const orderNo = asText(row.pedido);
-		if (!orderNo) return [];
-		return [
-			{
-				id: `${orderNo}:${index}`,
-				orderNo,
-				orderDate: asDate(row.fecha),
-				seller: asText(row.vendedor) || "Sin vendedor",
-				sellerCode: asText(row.codigo),
-				customer: asText(row.cliente),
-				channel: asText(row.canal),
-				status: asText(row.estado),
-				sku: asText(row.sku),
-				product: asText(row.producto),
-				brand: asText(row.marca),
-				category: asText(row.categoria),
-				quantity: Math.round(asNumber(row.cantidad)),
-				unitPrice: Math.round(asNumber(row.precio_unit) * 100),
-				total: Math.round(asNumber(row.total_pen) * 100),
-				payment: asText(row.medio_pago),
-				district: asText(row.distrito),
-			},
-		];
-	});
-}
-
-async function importSalesWhenEmpty(db: ReturnType<typeof drizzle>) {
-	const [{ value }] = await db.select({ value: count() }).from(salesLines);
-	if (value > 0) return;
-	const rows = await parseSalesWorkbook();
-	for (let offset = 0; offset < rows.length; offset += 400) {
-		await db
-			.insert(salesLines)
-			.values(rows.slice(offset, offset + 400))
-			.onConflictDoNothing();
 	}
 }
 
