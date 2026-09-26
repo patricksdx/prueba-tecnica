@@ -24,6 +24,11 @@ export type SellerSummary = {
 	orders: number;
 };
 
+export type SellerOption = {
+	id: string;
+	name: string;
+};
+
 export type MonthSales = {
 	month: string;
 	sales: number;
@@ -99,6 +104,7 @@ export type SalesDashboardDto = {
 	monthlySales: MonthSales[];
 	products: ProductSummary[];
 	sellers: SellerSummary[];
+	sellerOptions: SellerOption[];
 	orders: DashboardOrder[];
 	managedUsers: ManagedUserDto[];
 	reconciliation: ReconciliationDto;

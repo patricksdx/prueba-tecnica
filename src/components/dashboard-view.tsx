@@ -28,6 +28,7 @@ import {
 import {
 	type AppRole,
 	changeUserRole,
+	assignSellerToOrder,
 	getOrderDetails,
 } from "../server/users";
 import type {
@@ -132,6 +133,7 @@ export function DashboardView({ data, page }: { data: SalesData; page: Page }) {
 	const [details, setDetails] = useState<OrderDetails>([]);
 	const [loading, setLoading] = useState(false);
 	const [saving, setSaving] = useState<string | null>(null);
+	const [sellerSelection, setSellerSelection] = useState("");
 	const [error, setError] = useState("");
 	const [role, setRole] = useState<"pending" | AppRole>("pending");
 	const maxProduct = data.products[0]?.quantity || 1;
@@ -157,6 +159,7 @@ export function DashboardView({ data, page }: { data: SalesData; page: Page }) {
 
 	async function openOrder(order: Order) {
 		setSelectedOrder(order);
+		setSellerSelection("");
 		setDetails([]);
 		setLoading(true);
 		setError("");
@@ -179,6 +182,28 @@ export function DashboardView({ data, page }: { data: SalesData; page: Page }) {
 			setSelectedUser(null);
 		} catch {
 			setError("No se pudo actualizar el rol. Verifica tus permisos.");
+		} finally {
+			setSaving(null);
+		}
+	}
+
+	async function assignSeller() {
+		if (!selectedOrder || !sellerSelection) return;
+		setSaving(selectedOrder.orderNo);
+		setError("");
+		try {
+			const result = await assignSellerToOrder({
+				data: { orderNo: selectedOrder.orderNo, sellerId: sellerSelection },
+			});
+			setSelectedOrder({ ...selectedOrder, seller: result.seller });
+			setSellerSelection("");
+			await router.invalidate();
+		} catch (error) {
+			setError(
+				error instanceof Error
+					? error.message
+					: "No se pudo asignar el vendedor.",
+			);
 		} finally {
 			setSaving(null);
 		}
@@ -862,6 +887,37 @@ export function DashboardView({ data, page }: { data: SalesData; page: Page }) {
 									<p className="text-xs text-muted-foreground">Vendedor</p>
 									<strong>{selectedOrder.seller}</strong>
 								</div>
+								{data.user.role === "admin" &&
+									selectedOrder.seller === "Sin vendedor" && (
+										<div className="col-span-2 space-y-2 border-t pt-3">
+											<Label htmlFor="order-seller">Asignar vendedor</Label>
+											<div className="flex flex-col gap-2 sm:flex-row">
+												<Select
+													value={sellerSelection}
+													onValueChange={setSellerSelection}
+													disabled={saving !== null}
+												>
+													<SelectTrigger id="order-seller" className="w-full">
+														<SelectValue placeholder="Selecciona un vendedor" />
+													</SelectTrigger>
+													<SelectContent>
+														{data.sellerOptions.map((seller) => (
+															<SelectItem key={seller.id} value={seller.id}>
+																{seller.name}
+															</SelectItem>
+														))}
+													</SelectContent>
+												</Select>
+												<Button
+													type="button"
+													disabled={!sellerSelection || saving !== null}
+													onClick={() => void assignSeller()}
+												>
+													{saving === selectedOrder.orderNo ? "Guardando..." : "Asignar"}
+												</Button>
+											</div>
+										</div>
+									)}
 								<div>
 									<p className="text-xs text-muted-foreground">Canal</p>
 									<strong>{selectedOrder.channel || "No indicado"}</strong>

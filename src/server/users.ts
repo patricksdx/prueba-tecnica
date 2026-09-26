@@ -5,7 +5,11 @@ import { createServerFn } from "@tanstack/react-start";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { fetchOrderDetails, fetchSalesDashboard } from "./sales";
+import {
+	assignOrderSeller,
+	fetchOrderDetails,
+	fetchSalesDashboard,
+} from "./sales";
 import { users } from "./schema";
 
 export type AppRole = "admin" | "reader";
@@ -114,4 +118,17 @@ export const changeUserRole = createServerFn({ method: "POST" })
 			if (!updated) throw new Error("No se encontró el usuario.");
 			return updated;
 		});
+	});
+
+export const assignSellerToOrder = createServerFn({ method: "POST" })
+	.validator((input: { orderNo: string; sellerId: string }) => {
+		if (!input.orderNo.trim() || !input.sellerId.trim())
+			throw new Error("Pedido o vendedor inválido.");
+		return input;
+	})
+	.handler(async ({ data }) => {
+		const currentUser = await syncCurrentUser();
+		if (currentUser?.role !== "admin")
+			throw new Error("Se requiere el rol de administrador.");
+		return assignOrderSeller(data.orderNo, data.sellerId);
 	});

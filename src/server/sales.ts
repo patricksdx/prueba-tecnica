@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { auth, clerkClient } from "@clerk/tanstack-react-start/server";
-import { count, desc, eq, sql } from "drizzle-orm";
+import { and, count, desc, eq, isNull, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import type {
@@ -13,6 +13,7 @@ import type {
 	ReconciliationDto,
 	ReportedSummaryDto,
 	SalesDashboardDto,
+	SellerOption,
 	SellerSummary,
 } from "../types/sales";
 import {
@@ -21,6 +22,7 @@ import {
 	salesLines,
 	salesOrderLines,
 	salesOrders,
+	sellers,
 	users,
 } from "./schema";
 import type { AppRole } from "./users";
@@ -188,6 +190,10 @@ async function legacyDashboard(
 		sellers: [...sellerMap.values()]
 			.map(({ set, ...seller }) => ({ ...seller, orders: set.size }))
 			.sort((a, b) => b.sales - a.sales),
+		sellerOptions: await db
+			.select({ id: sellers.id, name: sellers.name })
+			.from(sellers)
+			.orderBy(sellers.name),
 		orders: [...orders.values()].sort((a, b) => b.date.localeCompare(a.date)),
 		managedUsers:
 			user.role === "admin"
@@ -293,6 +299,10 @@ export async function fetchSalesDashboard(): Promise<SalesDashboardDto> {
 			sales: num(r.sales),
 			orders: num(r.orders),
 		}));
+		const sellerOptions: SellerOption[] = await db
+			.select({ id: sellers.id, name: sellers.name })
+			.from(sellers)
+			.orderBy(sellers.name);
 
 		const orderRows = (await db.execute(sql`
 			SELECT o.external_no AS order_no, o.order_date AS date,
@@ -436,6 +446,7 @@ export async function fetchSalesDashboard(): Promise<SalesDashboardDto> {
 			monthlySales: months,
 			products,
 			sellers: sellerList,
+			sellerOptions,
 			orders,
 			managedUsers:
 				user.role === "admin"
@@ -452,6 +463,40 @@ export async function fetchSalesDashboard(): Promise<SalesDashboardDto> {
 					: [],
 			reconciliation,
 		};
+	});
+}
+
+export async function assignOrderSeller(
+	orderNo: string,
+	sellerId: string,
+): Promise<{ orderNo: string; seller: string }> {
+	return withDatabase(async (db) => {
+		const [seller] = await db
+			.select({ id: sellers.id, name: sellers.name })
+			.from(sellers)
+			.where(eq(sellers.id, sellerId))
+			.limit(1);
+		if (!seller) throw new Error("No se encontró el vendedor.");
+
+		const [updated] = await db
+			.update(salesOrders)
+			.set({ sellerId: seller.id })
+			.where(
+				and(
+					eq(salesOrders.externalNo, orderNo),
+					isNull(salesOrders.sellerId),
+				),
+			)
+			.returning({ orderNo: salesOrders.externalNo });
+		if (updated) return { orderNo: updated.orderNo, seller: seller.name };
+
+		const [legacyUpdated] = await db
+			.update(salesLines)
+			.set({ seller: seller.name })
+			.where(eq(salesLines.orderNo, orderNo))
+			.returning({ orderNo: salesLines.orderNo });
+		if (!legacyUpdated) throw new Error("No se encontró el pedido.");
+		return { orderNo: legacyUpdated.orderNo, seller: seller.name };
 	});
 }
 
